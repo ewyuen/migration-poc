@@ -1,0 +1,414 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="12.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{75CEA4DC-8F81-45FD-BE69-058249BD2081}</ProjectGuid>
+    <OutputType>WinExe</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>parent_bMedecine</RootNamespace>
+    <AssemblyName>parent_bMedecine</AssemblyName>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <ProjectTypeGuids>{60dc8134-eba5-43b8-bcc9-bb4bc16c2548};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
+    <WarningLevel>4</WarningLevel>
+    <SolutionDir Condition="$(SolutionDir) == '' Or $(SolutionDir) == '*Undefined*'">..\</SolutionDir>
+    <RestorePackages>true</RestorePackages>
+    <TargetFrameworkProfile />
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="De.TorstenMandelkow.MetroChart">
+      <HintPath>..\packages\De.TorstenMandelkow.MetroChart.1.0.0\lib\De.TorstenMandelkow.MetroChart.dll</HintPath>
+    </Reference>
+    <Reference Include="GalaSoft.MvvmLight.Extras.WPF45">
+      <HintPath>..\packages\MvvmLightLibs.4.1.27.1\lib\net45\GalaSoft.MvvmLight.Extras.WPF45.dll</HintPath>
+    </Reference>
+    <Reference Include="GalaSoft.MvvmLight.WPF45">
+      <HintPath>..\packages\MvvmLightLibs.4.1.27.1\lib\net45\GalaSoft.MvvmLight.WPF45.dll</HintPath>
+    </Reference>
+    <Reference Include="MahApps.Metro">
+      <HintPath>..\packages\MahApps.Metro.0.11.1.12-ALPHA\lib\net45\MahApps.Metro.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Practices.ServiceLocation">
+      <HintPath>..\packages\CommonServiceLocator.1.0\lib\NET35\Microsoft.Practices.ServiceLocation.dll</HintPath>
+    </Reference>
+    <Reference Include="System" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Runtime.Serialization" />
+    <Reference Include="System.ServiceModel" />
+    <Reference Include="System.Windows.Interactivity, Version=4.5.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
+      <HintPath>..\packages\MahApps.Metro.0.11.1.12-ALPHA\lib\net45\System.Windows.Interactivity.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Xml" />
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="System.Data.DataSetExtensions" />
+    <Reference Include="System.Xaml">
+      <RequiredTargetFramework>4.0</RequiredTargetFramework>
+    </Reference>
+    <Reference Include="WindowsBase" />
+    <Reference Include="PresentationCore" />
+    <Reference Include="PresentationFramework" />
+  </ItemGroup>
+  <ItemGroup>
+    <ApplicationDefinition Include="App.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </ApplicationDefinition>
+    <Compile Include="BusinessManagement\Observation\IObservationDataService.cs" />
+    <Compile Include="BusinessManagement\Observation\ObservationDataService.cs" />
+    <Compile Include="BusinessManagement\Patient\IPatientDataService.cs" />
+    <Compile Include="BusinessManagement\Patient\PatientDataService.cs" />
+    <Compile Include="BusinessManagement\User\IUserDataService.cs" />
+    <Compile Include="BusinessManagement\User\UserDataService.cs" />
+    <Compile Include="DataAccess\Observation\IObservationDataAccess.cs" />
+    <Compile Include="DataAccess\Observation\ObservationDataAccess.cs" />
+    <Compile Include="DataAccess\Patient\IPatientDataAccess.cs" />
+    <Compile Include="DataAccess\Patient\PatientDataAccess.cs" />
+    <Compile Include="DataAccess\User\IUserDataAccess.cs" />
+    <Compile Include="DataAccess\User\UserDataAccess.cs" />
+    <Compile Include="Message\OnAddObservationMessage.cs" />
+    <Compile Include="Message\OnAddPatientMessage.cs" />
+    <Compile Include="Message\OnAddUserMessage.cs" />
+    <Compile Include="Message\OnLoginMessage.cs" />
+    <Compile Include="Message\OnLogoutMessage.cs" />
+    <Compile Include="Message\OnPatientSelectionMessage.cs" />
+    <Compile Include="Message\OnPatientEmptyContent.cs" />
+    <Compile Include="Model\ChartObject.cs" />
+    <Compile Include="Resources\Images\Images.Designer.cs">
+      <AutoGen>True</AutoGen>
+      <DesignTime>True</DesignTime>
+      <DependentUpon>Images.resx</DependentUpon>
+    </Compile>
+    <Compile Include="Service References\ServiceLive\Reference.cs">
+      <AutoGen>True</AutoGen>
+      <DesignTime>True</DesignTime>
+      <DependentUpon>Reference.svcmap</DependentUpon>
+    </Compile>
+    <Compile Include="Service References\ServiceObservation\Reference.cs">
+      <AutoGen>True</AutoGen>
+      <DesignTime>True</DesignTime>
+      <DependentUpon>Reference.svcmap</DependentUpon>
+    </Compile>
+    <Compile Include="Service References\ServicePatient\Reference.cs">
+      <AutoGen>True</AutoGen>
+      <DesignTime>True</DesignTime>
+      <DependentUpon>Reference.svcmap</DependentUpon>
+    </Compile>
+    <Compile Include="Service References\ServiceUser\Reference.cs">
+      <AutoGen>True</AutoGen>
+      <DesignTime>True</DesignTime>
+      <DependentUpon>Reference.svcmap</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\Converters\BoolToColorConverter.cs" />
+    <Compile Include="Utilities\Converters\BoolToStringConverter.cs" />
+    <Compile Include="Utilities\Converters\BoolToVisibilityConverter.cs" />
+    <Compile Include="Utilities\Converters\NullImageConverter.cs" />
+    <Compile Include="Utilities\ImageManager.cs" />
+    <Compile Include="Utilities\RoleManager.cs" />
+    <Compile Include="ViewModel\FlyoutViewModel\AddObservationViewModel.cs" />
+    <Compile Include="ViewModel\FlyoutViewModel\AddPatientViewModel.cs" />
+    <Compile Include="ViewModel\FlyoutViewModel\AddUserViewModel.cs" />
+    <Compile Include="ViewModel\HomeViewModel.cs" />
+    <Compile Include="ViewModel\LoginViewModel.cs" />
+    <Compile Include="ViewModel\MainTabControlViewModel.cs" />
+    <Compile Include="ViewModel\MainViewModel.cs" />
+    <Compile Include="ViewModel\ObservationsViewModel.cs" />
+    <Compile Include="ViewModel\PatientsViewModel.cs" />
+    <Compile Include="ViewModel\UsersViewModel.cs" />
+    <Compile Include="ViewModel\ViewModelLocator.cs" />
+    <Compile Include="App.xaml.cs">
+      <DependentUpon>App.xaml</DependentUpon>
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="View\Flyout\AddObservationFlyout.xaml.cs">
+      <DependentUpon>AddObservationFlyout.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="View\Flyout\AddPatientFlyout.xaml.cs">
+      <DependentUpon>AddPatientFlyout.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="View\Flyout\AddUserFlyout.xaml.cs">
+      <DependentUpon>AddUserFlyout.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="View\Flyout\DeletePatientFlyout.xaml.cs">
+      <DependentUpon>DeletePatientFlyout.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="View\HomeView.xaml.cs">
+      <DependentUpon>HomeView.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="View\LoginView.xaml.cs">
+      <DependentUpon>LoginView.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="View\MainTabControlView.xaml.cs">
+      <DependentUpon>MainTabControlView.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="View\MainWindow.xaml.cs">
+      <DependentUpon>MainWindow.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="View\ObservationsView.xaml.cs">
+      <DependentUpon>ObservationsView.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="View\PatientsView.xaml.cs">
+      <DependentUpon>PatientsView.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="View\UsersView.xaml.cs">
+      <DependentUpon>UsersView.xaml</DependentUpon>
+    </Compile>
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Properties\AssemblyInfo.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Properties\Resources.Designer.cs">
+      <AutoGen>True</AutoGen>
+      <DesignTime>True</DesignTime>
+      <DependentUpon>Resources.resx</DependentUpon>
+    </Compile>
+    <Compile Include="Properties\Settings.Designer.cs">
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Settings.settings</DependentUpon>
+      <DesignTimeSharedInput>True</DesignTimeSharedInput>
+    </Compile>
+    <EmbeddedResource Include="Properties\Resources.resx">
+      <Generator>PublicResXFileCodeGenerator</Generator>
+      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\Images\Images.resx">
+      <Generator>PublicResXFileCodeGenerator</Generator>
+      <LastGenOutput>Images.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
+    <None Include="packages.config" />
+    <None Include="Properties\DataSources\Dbo.Patient.datasource" />
+    <None Include="Properties\DataSources\Dbo.User.datasource" />
+    <None Include="Properties\Settings.settings">
+      <Generator>SettingsSingleFileGenerator</Generator>
+      <LastGenOutput>Settings.Designer.cs</LastGenOutput>
+    </None>
+    <AppDesigner Include="Properties\" />
+    <None Include="Service References\ServiceObservation\ServiceObservation1.wsdl" />
+    <None Include="Service References\ServiceObservation\ServiceObservation4.xsd">
+      <SubType>Designer</SubType>
+    </None>
+    <None Include="Service References\ServiceObservation\ServiceObservation41.xsd">
+      <SubType>Designer</SubType>
+    </None>
+    <None Include="Service References\ServiceObservation\ServiceObservation42.xsd">
+      <SubType>Designer</SubType>
+    </None>
+    <None Include="Service References\ServiceObservation\ServiceObservation43.xsd">
+      <SubType>Designer</SubType>
+    </None>
+    <None Include="Service References\ServicePatient\ServicePatient1.wsdl" />
+    <None Include="Service References\ServicePatient\ServicePatient4.xsd">
+      <SubType>Designer</SubType>
+    </None>
+    <None Include="Service References\ServicePatient\ServicePatient41.xsd">
+      <SubType>Designer</SubType>
+    </None>
+    <None Include="Service References\ServicePatient\ServicePatient42.xsd">
+      <SubType>Designer</SubType>
+    </None>
+    <None Include="Service References\ServicePatient\ServicePatient43.xsd">
+      <SubType>Designer</SubType>
+    </None>
+    <None Include="Service References\ServiceUser\ServiceUser1.wsdl" />
+    <None Include="Service References\ServiceUser\ServiceUser3.xsd">
+      <SubType>Designer</SubType>
+    </None>
+    <None Include="Service References\ServiceUser\ServiceUser31.xsd">
+      <SubType>Designer</SubType>
+    </None>
+    <None Include="Service References\ServiceUser\ServiceUser32.xsd">
+      <SubType>Designer</SubType>
+    </None>
+    <Resource Include="Resources\Entypo.ttf" />
+    <None Include="Service References\ServiceLive\ServiceLive.wsdl" />
+    <None Include="Service References\ServiceLive\ServiceLive.xsd">
+      <SubType>Designer</SubType>
+    </None>
+    <None Include="Service References\ServiceLive\ServiceLive1.xsd">
+      <SubType>Designer</SubType>
+    </None>
+    <None Include="Service References\ServicePatient\parent_bMedecine.ServicePatient.Patient.datasource">
+      <DependentUpon>Reference.svcmap</DependentUpon>
+    </None>
+    <None Include="Service References\ServiceUser\parent_bMedecine.ServiceUser.User.datasource">
+      <DependentUpon>Reference.svcmap</DependentUpon>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="App.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <WCFMetadata Include="Service References\" />
+  </ItemGroup>
+  <ItemGroup>
+    <Page Include="Resources\Icons.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="View\Flyout\AddObservationFlyout.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="View\Flyout\AddPatientFlyout.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="View\Flyout\AddUserFlyout.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="View\Flyout\DeletePatientFlyout.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="View\HomeView.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="View\LoginView.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="View\MainTabControlView.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="View\MainWindow.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="View\ObservationsView.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="View\PatientsView.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="View\UsersView.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+  </ItemGroup>
+  <ItemGroup>
+    <WCFMetadataStorage Include="Service References\ServiceLive\" />
+    <WCFMetadataStorage Include="Service References\ServiceObservation\" />
+    <WCFMetadataStorage Include="Service References\ServicePatient\" />
+    <WCFMetadataStorage Include="Service References\ServiceUser\" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Service References\ServiceUser\configuration91.svcinfo" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Service References\ServiceUser\configuration.svcinfo" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Service References\ServiceUser\Reference.svcmap">
+      <Generator>WCF Proxy Generator</Generator>
+      <LastGenOutput>Reference.cs</LastGenOutput>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Service References\ServicePatient\configuration91.svcinfo" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Service References\ServicePatient\configuration.svcinfo" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Service References\ServicePatient\Reference.svcmap">
+      <Generator>WCF Proxy Generator</Generator>
+      <LastGenOutput>Reference.cs</LastGenOutput>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Service References\ServiceObservation\configuration91.svcinfo" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Service References\ServiceObservation\configuration.svcinfo" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Service References\ServiceObservation\Reference.svcmap">
+      <Generator>WCF Proxy Generator</Generator>
+      <LastGenOutput>Reference.cs</LastGenOutput>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Resources\Entypo-license.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Resources\Images\black_heart.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Resources\Images\white_heart.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Resources\Images\medical_symbol.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Resources\Images\AddObservation.png" />
+    <Resource Include="Resources\Images\AddUser.png" />
+    <Resource Include="Resources\Images\DeleteUser.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Resources\Images\DeleteObservation.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Service References\ServiceLive\ServiceLive.disco" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Service References\ServiceLive\configuration91.svcinfo" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Service References\ServiceLive\configuration.svcinfo" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Service References\ServiceLive\Reference.svcmap">
+      <Generator>WCF Proxy Generator</Generator>
+      <LastGenOutput>Reference.cs</LastGenOutput>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Service References\ServiceUser\ServiceUser1.disco" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Service References\ServicePatient\ServicePatient1.disco" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Service References\ServiceObservation\ServiceObservation1.disco" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Resources\Images\default_avatar.png" />
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <Import Project="$(SolutionDir)\.nuget\NuGet.targets" Condition="Exists('$(SolutionDir)\.nuget\NuGet.targets')" />
+  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
+       Other similar extension points exist, see Microsoft.Common.targets.
+  <Target Name="BeforeBuild">
+  </Target>
+  <Target Name="AfterBuild">
+  </Target>
+  -->
+</Project>

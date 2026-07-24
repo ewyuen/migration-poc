@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ReferenceGroup xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" ID="5ed5d7c4-ca9a-4f26-9d76-6e8c7d333af9" xmlns="urn:schemas-microsoft-com:xml-wcfservicemap">
+  <ClientOptions>
+    <GenerateAsynchronousMethods>false</GenerateAsynchronousMethods>
+    <GenerateTaskBasedAsynchronousMethod>true</GenerateTaskBasedAsynchronousMethod>
+    <EnableDataBinding>true</EnableDataBinding>
+    <ExcludedTypes />
+    <ImportXmlTypes>false</ImportXmlTypes>
+    <GenerateInternalTypes>false</GenerateInternalTypes>
+    <GenerateMessageContracts>false</GenerateMessageContracts>
+    <NamespaceMappings />
+    <CollectionMappings>
+      <CollectionMapping TypeName="System.Collections.Generic.List`1" Category="List" />
+    </CollectionMappings>
+    <GenerateSerializableTypes>true</GenerateSerializableTypes>
+    <Serializer>Auto</Serializer>
+    <UseSerializerForFaults>true</UseSerializerForFaults>
+    <ReferenceAllAssemblies>true</ReferenceAllAssemblies>
+    <ReferencedAssemblies />
+    <ReferencedDataContractTypes />
+    <ServiceContractMappings />
+  </ClientOptions>
+  <MetadataSources>
+    <MetadataSource Address="http://localhost:23402/ServiceUser.svc" Protocol="http" SourceId="1" />
+  </MetadataSources>
+  <Metadata>
+    <MetadataFile FileName="ServiceUser3.xsd" MetadataType="Schema" ID="15c1e9a0-e230-4a9a-afe7-4ac7a5aed9d2" SourceId="1" SourceUrl="http://localhost:23402/ServiceUser.svc?xsd=xsd2" />
+    <MetadataFile FileName="ServiceUser1.disco" MetadataType="Disco" ID="e5ac1f48-a16a-4fb1-a550-b0d28f51c798" SourceId="1" SourceUrl="http://localhost:23402/ServiceUser.svc?disco" />
+    <MetadataFile FileName="ServiceUser31.xsd" MetadataType="Schema" ID="12b3c9d2-c6d3-4fc2-9398-8e4817c01fac" SourceId="1" SourceUrl="http://localhost:23402/ServiceUser.svc?xsd=xsd1" />
+    <MetadataFile FileName="ServiceUser32.xsd" MetadataType="Schema" ID="fc59e885-3c30-45db-adba-74e83eef509b" SourceId="1" SourceUrl="http://localhost:23402/ServiceUser.svc?xsd=xsd0" />
+    <MetadataFile FileName="ServiceUser1.wsdl" MetadataType="Wsdl" ID="00386126-cf9c-4723-9f3c-6c54a1b91e63" SourceId="1" SourceUrl="http://localhost:23402/ServiceUser.svc?wsdl" />
+  </Metadata>
+  <Extensions>
+    <ExtensionFile FileName="configuration91.svcinfo" Name="configuration91.svcinfo" />
+    <ExtensionFile FileName="configuration.svcinfo" Name="configuration.svcinfo" />
+  </Extensions>
+</ReferenceGroup>

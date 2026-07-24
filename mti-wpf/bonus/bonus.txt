@@ -1,0 +1,9 @@
+parent_bMedecine - Bonus :
+
+* Architecture N-Tier avec injection de dépendances (SimpleIoc).
+
+* Utilisation du toolkit open-source MahApps.Metro (https://github.com/MahApps/MahApps.Metro)
+permettant notamment l'utilisation des "flyouts".
+
+* Utilisation de la bibliothèque Modern UI Charts (http://modernuicharts.codeplex.com/) pour
+l'affichage des données patients sous formes de graphiques modernes.
