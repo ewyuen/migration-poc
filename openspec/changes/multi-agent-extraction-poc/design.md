@@ -1,6 +1,6 @@
 ## Context
 
-This POC prepares for an Agilent **Software Modernization Enablement Lead Engineer** interview, demonstrating practical mastery of multi-agent AI workflows for legacy code modernization in regulated (medical/21 CFR Part 11) environments. The starting point is a real legacy WPF/WCF medical application (`mti-wpf` codebase) that serves as both the proof-of-concept input and a realistic proxy for Agilent's OpenLab Suite modernization challenges. The candidate has relevant experience: ThermoFisher Xcalibur (chromatography data systems), PacBio .NET Framework→.NET 8 migration, and understanding of compliance requirements. The goal is to show a *working, auditable, scalable methodology* that can be demonstrated during the interview.
+This POC prepares for a role of **Software Modernization Enablement Lead Engineer**, demonstrating practical mastery of multi-agent AI workflows for legacy code modernization in regulated (medical/21 CFR Part 11) environments. The starting point is a real legacy WPF/WCF medical application (`mti-wpf` codebase) that serves as both the proof-of-concept input and a realistic proxy for modernization challenges of device company.  The goal is to show a *working, auditable, scalable methodology* that can be demonstrated as a POC.
 
 ## Goals / Non-Goals
 
@@ -16,7 +16,7 @@ This POC prepares for an Agilent **Software Modernization Enablement Lead Engine
 - Production-ready deployment (this is a POC, not a shipping service)
 - Comprehensive formal verification (Lean proofs mentioned but not implemented in this phase)
 - Parallel agent execution (sequential is simpler, clearer, more auditable for interview)
-- Integrate with existing Agilent systems (reference architecture only)
+- Integrate with existing systems (reference architecture only)
 - Support for languages other than C# (POC focuses on legacy C# → .NET 10)
 
 ## Decisions
@@ -89,7 +89,7 @@ This POC prepares for an Agilent **Software Modernization Enablement Lead Engine
 **Rationale**:
 - **Forward-looking**: Shows understanding of platform roadmap
 - **C# 14 features**: Modern syntax and patterns (records, pattern matching, IAsyncEnumerable)
-- **Interview positioning**: Demonstrates cutting-edge thinking, matches Agilent's modernization goals
+- **Interview positioning**: Demonstrates cutting-edge thinking, matches latest modernization goals
 - **Performance & Cloud-native**: .NET 10 optimizations for containerized, Kubernetes deployments
 
 ### Decision 6: Single Component POC (vs. Multiple Components)
