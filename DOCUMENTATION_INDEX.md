@@ -127,12 +127,12 @@ Generated files are in `legacy-code/ComponentName/`:
 #### ✅ Configure the system
 → See **CONFIG_SCHEMA_GUIDE.md** → "Global Settings"
 
-Edit `config.yaml` to change paths, target framework, error handling, etc.
+Edit `migration_config.yaml` to change paths, target framework, error handling, etc.
 
 #### ✅ Customize agent behavior
 → See **CONFIG_SCHEMA_GUIDE.md** → "Agent Definitions"
 
-Modify `config.yaml` agent entries to change tools, inputs, outputs.
+Modify `migration_config.yaml` agent entries to change tools, inputs, outputs.
 
 #### ✅ Troubleshoot an issue
 → See **MIGRATION_SYSTEM.md** → "Troubleshooting"
@@ -247,9 +247,9 @@ Review `scenarios.feature` for business-readable test specs.
 
 ### For Administrators
 1. Read: CONFIG_SCHEMA_GUIDE.md - "File Structure" (10 min)
-2. Review: config.yaml in repository root (5 min)
+2. Review: migration_config.yaml in repository root (5 min)
 3. Read: MIGRATION_SYSTEM.md - "Architecture" (15 min)
-4. Customize: config.yaml as needed (varies)
+4. Customize: migration_config.yaml as needed (varies)
 
 **Total time: ~30 minutes**
 
@@ -382,7 +382,7 @@ Start with this order:
 
 1. **Try a migration** - Run the system with TestService or your own component
 2. **Review output** - Understand the generated artifacts
-3. **Customize as needed** - Modify config.yaml for your needs
+3. **Customize as needed** - Modify migration_config.yaml for your needs
 4. **Integrate with CI/CD** - Set up automated migrations
 5. **Provide feedback** - Report issues or suggest improvements
 

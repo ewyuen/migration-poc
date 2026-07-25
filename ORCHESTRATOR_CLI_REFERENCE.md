@@ -57,7 +57,7 @@ orchestrator_v2.py [OPTIONS] <component_name> [filters_json]
 During execution, you'll see:
 
 ```
-✅ Config loaded: config.yaml
+✅ Config loaded: migration_config.yaml
 
 ======================================================================
 🎭 ORCHESTRATOR V2: Migration Workflow
@@ -289,8 +289,8 @@ done
 ### Check Config Validity
 
 ```bash
-# Validate config.yaml syntax
-python -c "import yaml; yaml.safe_load(open('../config.yaml')); print('✅ Config valid')"
+# Validate migration_config.yaml syntax
+python -c "import yaml; yaml.safe_load(open('../migration_config.yaml')); print('✅ Config valid')"
 ```
 
 ### List Components
@@ -471,7 +471,7 @@ state.completed_stages = ["validation", "staging", "exploration", "extraction"]
 
 ```python
 # Modify orchestrator_v2.py
-orchestrator = OrchestratorV2(config_path="custom-config.yaml")
+orchestrator = OrchestratorV2(config_path="custom-migration_config.yaml")
 ```
 
 ### Enable Debug Logging
