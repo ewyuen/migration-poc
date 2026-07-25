@@ -166,7 +166,7 @@ class OrchestratorV2:
 
         # STAGE 4: EXTRACTION
         state.advance_stage("extraction")
-        legacy_code_path = os.path.join("..", "migrated-output", request.component_name)
+        legacy_code_path = os.path.join("legacy-code", request.component_name)
 
         # Read all .cs files from the component directory
         legacy_code = ""
@@ -260,7 +260,7 @@ class OrchestratorV2:
         """Explore component using explorer agent"""
         print(f"Exploring component: {component_name}...")
 
-        component_path = os.path.join("..", "migrated-output", component_name)
+        component_path = os.path.join("legacy-code", component_name)
         if not os.path.exists(component_path):
             return False, {}
 
