@@ -12,7 +12,7 @@ from typing import Dict, List, Tuple, Optional
 class StagingAgent:
     """Handles component copying and branch creation"""
 
-    def __init__(self, legacy_src_dir: str = "legacy-src", legacy_code_dir: str = "../migrated-output"):
+    def __init__(self, legacy_src_dir: str = "legacy-src", legacy_code_dir: str = "migrated-output"):
         self.legacy_src_dir = legacy_src_dir
         self.legacy_code_dir = legacy_code_dir
         self._ensure_directories()

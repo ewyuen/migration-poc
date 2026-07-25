@@ -107,7 +107,7 @@ class OrchestratorV2:
 
     def _save_output(self, component_name: str, filename: str, content: str) -> str:
         """Save output to migrated-output directory"""
-        output_dir = os.path.join("..", "migrated-output", component_name)
+        output_dir = os.path.join("migrated-output", component_name)
         Path(output_dir).mkdir(parents=True, exist_ok=True)
 
         filepath = os.path.join(output_dir, filename)
@@ -298,7 +298,7 @@ class OrchestratorV2:
             for risk in risk_list[:5]:
                 print(f"   - {risk}")
 
-        print(f"\n📁 Outputs saved to: ../migrated-output/{state.request.component_name}/")
+        print(f"\n📁 Outputs saved to: migrated-output/{state.request.component_name}/")
         print("="*70 + "\n")
 
 
