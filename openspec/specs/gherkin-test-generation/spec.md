@@ -46,19 +46,19 @@ The system SHALL translate Gherkin Given/When/Then steps into corresponding test
 - **THEN** generated test includes assertion statement validating expected state or response
 
 ### Requirement: Output tests in service-appropriate directory structure
-The system SHALL place generated test files in locations that integrate with each service's testing framework and IDE discovery.
+The system SHALL place generated Gherkin feature files and unit test files in a dedicated `tests` subfolder under the modernized output directory of each service.
 
-#### Scenario: Output C# tests to Tests directory
+#### Scenario: Output C# tests to tests subfolder
 - **WHEN** test generation completes for a C# service
-- **THEN** test file is written to `<ServiceRoot>/Tests/GeneratedScenarioTests.cs`
+- **THEN** both the Gherkin feature file and the test file are written to `<ServiceRoot>/tests/`
 
-#### Scenario: Output Java tests to test source directory
+#### Scenario: Output Java tests to tests subfolder
 - **WHEN** test generation completes for a Java service
-- **THEN** test file is written to `<ServiceRoot>/src/test/java/<package>/GeneratedScenarioTests.java`
+- **THEN** both the Gherkin feature file and the test file are written to `<ServiceRoot>/tests/`
 
-#### Scenario: Output Python tests to tests directory
+#### Scenario: Output Python tests to tests subfolder
 - **WHEN** test generation completes for a Python service
-- **THEN** test file is written to `<ServiceRoot>/tests/test_generated_scenarios.py`
+- **THEN** both the Gherkin feature file and the test file are written to `<ServiceRoot>/tests/`
 
 ### Requirement: Support multiple service programming languages
 The system SHALL detect the target language of each migrated service and apply the appropriate code generator.
