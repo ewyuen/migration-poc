@@ -19,6 +19,7 @@ class CompilerError:
 
 
 MIGRATION_HINTS = {
+    # Compiler errors (CS*)
     "CS0103": "ConfigurationManager is from System.Configuration. Replace with IConfiguration dependency injection pattern or add NuGet: System.Configuration.ConfigurationManager.",
     "CS0246": "Legacy System.Web types not available in .NET 10. Use ASP.NET Core equivalents (e.g., Microsoft.AspNetCore.Http).",
     "CS0117": "Configuration APIs changed. Use IConfiguration injected via DI instead of WebConfigurationManager.",
@@ -29,6 +30,9 @@ MIGRATION_HINTS = {
     "CS0535": "Interface member not implemented. Add all required members.",
     "CS0436": "Type conflict (likely generated assembly attributes). Remove duplicate definitions.",
     "CS0649": "Field never assigned. Initialize in constructor or mark nullable.",
+    # NuGet errors (NU*)
+    "NU1202": "Package version does not support the target framework. Update to a newer version that supports net10.0 or adjust .csproj TargetFramework.",
+    "NU1605": "Downgrade warning - package requires a newer version. Update the package version to the latest that supports net10.0.",
 }
 
 
@@ -66,7 +70,7 @@ class DotNetMigrationAgent:
     <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.0" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
-    <PackageReference Include="System.Configuration.ConfigurationManager" Version="8.0.1" />
+    <PackageReference Include="System.Configuration.ConfigurationManager" Version="10.0.0" />
   </ItemGroup>
 
 </Project>
@@ -95,18 +99,20 @@ class DotNetMigrationAgent:
             # Capture full output for error analysis
             full_output = result.stdout + result.stderr
 
-            # Check if this is a restore error or compilation error
-            is_restore_error = "NU" in full_output or "restore" in full_output.lower() or "package" in full_output.lower()
-
             # Parse errors (both restore and compilation)
             errors = self._parse_compiler_errors(full_output)
 
-            # If restore error detected, return full output so LLM can fix .csproj
-            if is_restore_error and not errors:
-                # Extract package/restore error message
-                error_msg = full_output[-1000:]  # Last 1000 chars likely has the error
+            # Check if this is a NuGet/restore error
+            # (NuGet errors need .csproj fixes, not code fixes)
+            nuget_errors = [e for e in errors if e.error_code.startswith("NU")]
+            if nuget_errors:
+                # Send NuGet error + .csproj to LLM for fixing
+                error_msg = f"{len(nuget_errors)} NuGet error(s):\n"
+                for err in nuget_errors:
+                    error_msg += f"  [{err.error_code}] {err.message}\n"
                 return False, [], error_msg
 
+            # For other errors, return them for LLM to fix code
             return False, errors, None
 
         except subprocess.TimeoutExpired:
@@ -117,11 +123,17 @@ class DotNetMigrationAgent:
             return False, [CompilerError("", 0, 0, "ERROR", str(e))], None
 
     def _parse_compiler_errors(self, build_output: str) -> List[CompilerError]:
-        """Parse MSBuild error lines: path(line,col): error CSxxxx: message"""
-        pattern = r"(.*?)\((\d+),(\d+)\):\s+error\s+(CS\d+):\s+(.*?)(?:\s*\[|$)"
+        """Parse errors: compiler (CSxxxx) and NuGet (NUxxxx)"""
         errors = []
+
+        # Pattern 1: Compiler errors - path(line,col): error CSxxxx: message [project]
+        cs_pattern = r"(.*?)\((\d+),(\d+)\):\s+error\s+(CS\d+):\s+(.*?)(?:\s*\[|$)"
+        # Pattern 2: NuGet errors - path : error NUxxxx: message
+        nu_pattern = r"(.*?)\s+:\s+error\s+(NU\d+):\s+(.*?)$"
+
         for line in build_output.splitlines():
-            match = re.search(pattern, line)
+            # Try compiler error pattern first
+            match = re.search(cs_pattern, line)
             if match:
                 file_path, line_num, col_num, code, msg = match.groups()
                 errors.append(CompilerError(
@@ -131,6 +143,20 @@ class DotNetMigrationAgent:
                     error_code=code.strip(),
                     message=msg.strip()
                 ))
+                continue
+
+            # Try NuGet error pattern
+            match = re.search(nu_pattern, line)
+            if match:
+                file_path, code, msg = match.groups()
+                errors.append(CompilerError(
+                    file_path=file_path.strip(),
+                    line=0,  # NuGet errors don't have line numbers
+                    column=0,
+                    error_code=code.strip(),
+                    message=msg.strip()
+                ))
+
         return errors
 
     def generate_repair_prompt(self, file_content: str, errors: List[CompilerError]) -> str:
