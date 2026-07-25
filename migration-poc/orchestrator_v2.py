@@ -120,6 +120,82 @@ class OrchestratorV2:
         with open(log_file, "a", encoding="utf-8") as f:
             f.write(json.dumps(log_entry, default=str) + "\n")
 
+    def _extract_class_name(self, code_content: str) -> Optional[str]:
+        """Extract the primary class name from C# code"""
+        import re
+        # Look for public class, interface, record, struct definitions
+        patterns = [
+            r'public\s+class\s+(\w+)',
+            r'public\s+interface\s+I(\w+)',
+            r'public\s+record\s+(\w+)',
+            r'public\s+struct\s+(\w+)',
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, code_content)
+            if match:
+                return match.group(1)
+        return None
+
+    def _read_component_files(self, component_path: str) -> Dict[str, str]:
+        """Read all .cs files from component directory with their names"""
+        files_content = {}
+        try:
+            for root, dirs, files in os.walk(component_path):
+                for file in files:
+                    if file.endswith(".cs"):
+                        filepath = os.path.join(root, file)
+                        with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
+                            files_content[file] = f.read()
+        except Exception as e:
+            print(f"⚠️  Error reading component files: {e}")
+        return files_content
+
+    def _parse_modernized_files(self, modernized_code: str, original_files: list) -> Dict[str, str]:
+        """
+        Parse modernized code and organize into files.
+        Try to preserve original filenames or use class names.
+        """
+        import re
+        result = {}
+
+        # Strip markdown wrappers first
+        clean_code = self._strip_markdown_code_block(modernized_code)
+
+        # Try to identify namespace blocks and classes
+        namespace_pattern = r'namespace\s+[\w.]+\s*\{(.*?)(?=namespace|\Z)'
+        class_pattern = r'(public\s+(?:class|interface|record|struct)\s+\w+.*?(?=\n\s*(?:public\s+(?:class|interface|record|struct)|namespace|\Z)))'
+
+        namespaces = list(re.finditer(namespace_pattern, clean_code, re.DOTALL))
+
+        if len(namespaces) > 1 or len(original_files) > 1:
+            # Multiple files - try to extract individual classes
+            classes = re.finditer(class_pattern, clean_code, re.DOTALL | re.MULTILINE)
+            file_index = 0
+            for match in classes:
+                code_section = match.group(1)
+                class_name = self._extract_class_name(code_section)
+                if class_name:
+                    filename = f"{class_name}.cs"
+                    result[filename] = code_section.strip()
+                    file_index += 1
+
+            # If we couldn't parse individual classes, use original filenames
+            if not result and original_files:
+                filename = list(original_files)[0] if isinstance(original_files, (list, tuple)) else "ModernizedCode.cs"
+                result[filename] = clean_code
+        else:
+            # Single file - try to preserve original name or extract class name
+            class_name = self._extract_class_name(clean_code)
+            if class_name:
+                filename = f"{class_name}.cs"
+            elif original_files:
+                filename = list(original_files)[0] if isinstance(original_files, (list, tuple)) else "ModernizedCode.cs"
+            else:
+                filename = "ModernizedCode.cs"
+            result[filename] = clean_code
+
+        return result if result else {"ModernizedCode.cs": clean_code}
+
     def _strip_markdown_code_block(self, content: str) -> str:
         """Remove markdown code block wrappers if present"""
         lines = content.split('\n')
@@ -209,29 +285,30 @@ class OrchestratorV2:
         legacy_code_path = os.path.join("legacy-code", request.component_name)
 
         # Read all .cs files from the component directory
-        legacy_code = ""
-        try:
-            for root, dirs, files in os.walk(legacy_code_path):
-                for file in files:
-                    if file.endswith(".cs"):
-                        filepath = os.path.join(root, file)
-                        with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
-                            legacy_code += f.read() + "\n"
-        except Exception as e:
-            state.mark_stage_failed(f"Failed to read component files: {str(e)}")
+        component_files = self._read_component_files(legacy_code_path)
+        if not component_files:
+            state.mark_stage_failed(f"No .cs files found in {legacy_code_path}")
             self._log_workflow(state)
             return state.to_dict()
 
-        extraction = extract_domain_logic(legacy_code, exploration_results)
+        # Combine all file contents for analysis
+        combined_legacy_code = "\n".join(component_files.values())
+
+        extraction = extract_domain_logic(combined_legacy_code, exploration_results)
         self._save_output(request.component_name, "extracted_logic.md", extraction)
         state.artifacts["extraction"] = extraction
         state.mark_stage_complete()
 
         # STAGE 5: MODERNIZATION
         state.advance_stage("modernization")
-        modernized_code = modernize_code(legacy_code, extraction, exploration_results)
-        self._save_output(request.component_name, "modernized_code.cs", modernized_code)
+        modernized_code = modernize_code(combined_legacy_code, extraction, exploration_results)
         state.artifacts["modernization"] = modernized_code
+
+        # Extract and save modernized code with appropriate filenames
+        modernized_files = self._parse_modernized_files(modernized_code, component_files.keys())
+        for filename, content in modernized_files.items():
+            self._save_output(request.component_name, filename, content)
+
         state.mark_stage_complete()
 
         # STAGE 6: BDD & TEST WRITING
