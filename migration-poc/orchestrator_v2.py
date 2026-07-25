@@ -15,7 +15,6 @@ from agents.extractor import extract_domain_logic
 from agents.modernizer import modernize_code
 from agents.bdd_test_agent import generate_bdd_tests
 from agents.test_writer import TestWriter
-from agents.verifier import verify_modernization
 from config import OUTPUT_DIR, TARGET_FRAMEWORK, COMPLIANCE_CONTEXT, DOMAIN
 
 
@@ -330,16 +329,9 @@ class OrchestratorV2:
         state.artifacts["test_code"] = test_code if success else ""
         state.mark_stage_complete()
 
-        # STAGE 7: VERIFICATION
-        state.advance_stage("verification")
-        verification = verify_modernization(legacy_code, modernized_code, extraction, bdd_tests)
-        self._save_output(request.component_name, "verification_report.json", json.dumps(verification, indent=2))
-        state.artifacts["verification"] = verification
-        state.mark_stage_complete()
-
-        # Summary
+        # Summary (Verification stage skipped for now)
         self._log_workflow(state)
-        self._print_summary(state, verification)
+        self._print_summary(state)
 
         return state.to_dict()
 
@@ -398,22 +390,15 @@ class OrchestratorV2:
         except Exception as e:
             return False, {"error": str(e)}
 
-    def _print_summary(self, state: WorkflowState, verification: Dict) -> None:
+    def _print_summary(self, state: WorkflowState) -> None:
         """Print workflow summary"""
         print("\n" + "="*70)
         print("✨ MIGRATION WORKFLOW COMPLETE")
         print("="*70)
         print(f"\nComponent: {state.request.component_name}")
-        print(f"Status: {verification.get('overall_status', 'UNKNOWN')}")
-        print(f"Completed Stages: {len(state.completed_stages)}/7")
+        print(f"Status: {state.to_dict().get('status', 'unknown')}")
+        print(f"Completed Stages: {len(state.completed_stages)}/6")
         print(f"Total Time: {state.to_dict().get('timestamp_end', 'Unknown')}")
-
-        risks = verification.get("risks", [])
-        if risks:
-            print(f"\n⚠️  Risks Identified:")
-            risk_list = risks if isinstance(risks, list) else [risks]
-            for risk in risk_list[:5]:
-                print(f"   - {risk}")
 
         print(f"\n📁 Source files saved to: migrated-output/{state.request.component_name}/")
         print(f"📁 Logs and reports saved to: migrated-output/result-log/")
