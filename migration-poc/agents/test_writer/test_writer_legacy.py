@@ -164,8 +164,12 @@ class TestCodeGenerator:
 
         code = []
         code.append("using System;")
+        code.append("using System.Threading.Tasks;")
+        code.append("using System.Collections.Generic;")
+        code.append("using System.Linq;")
         code.append("using Xunit;")
         code.append("using FluentAssertions;")
+        code.append(f"using {component_name};")
         code.append(f"// Auto-generated from Gherkin: {feature_name}")
         code.append(f"// Component: {component_name}")
         code.append(f"// Generated: {datetime.now().isoformat()}\n")

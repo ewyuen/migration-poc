@@ -92,11 +92,21 @@ class TestWriterAgent:
 
             # 5. Add missing using statements if necessary
             # Make sure Task-based async tests have required imports
+            # Extract component name from namespace (e.g., "TestService.Tests" -> "TestService")
+            component_namespace = None
+            namespace_match = re.search(r'namespace\s+(\w+)\.Tests', modified_content)
+            if namespace_match:
+                component_namespace = namespace_match.group(1)
+
             required_usings = [
+                "using System;",
                 "using System.Threading.Tasks;",
                 "using System.Collections.Generic;",
                 "using System.Linq;"
             ]
+            if component_namespace:
+                required_usings.append(f"using {component_namespace};")
+
             for ru in required_usings:
                 if ru not in modified_content:
                     modified_content = ru + "\n" + modified_content
