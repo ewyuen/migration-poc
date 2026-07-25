@@ -64,10 +64,13 @@ def generate_test_csproj(tests_dir: str, component_name: str = None) -> None:
 
 def run_test_compiler(component_name: str, base_output_dir: str = "migrated-output") -> Dict:
     """
-    Creates tests.csproj and compiles the test project, collecting raw outputs.
+    Stage 5 only: Creates tests.csproj and verifies the test project compiles.
+
+    Does NOT run tests (that is Stage 6's responsibility).
+    Uses 'dotnet build' to verify syntax and dependencies are correct.
 
     Returns:
-        Dict detailing build status, compilation errors, and directory paths.
+        Dict with compiled: bool, errors: list, tests_dir: str
     """
     tests_dir = os.path.join(base_output_dir, component_name, "tests")
     report = {
@@ -85,9 +88,9 @@ def run_test_compiler(component_name: str, base_output_dir: str = "migrated-outp
     # 1. Generate tests.csproj (references source project from Step 4)
     generate_test_csproj(tests_dir, component_name)
 
-    # 2. Run dotnet test
-    print(f"🏃 Running dotnet test with coverage collection in {tests_dir}...")
-    cmd = ["dotnet", "test", "--collect:XPlat Code Coverage", "--logger:trx;LogFileName=results.trx"]
+    # 2. Compile test project (Stage 5 only compiles, Stage 6 runs tests)
+    print(f"🔨 Compiling test project in {tests_dir}...")
+    cmd = ["dotnet", "build"]
     try:
         # Run with UTF-8 environment variable
         env = os.environ.copy()
@@ -99,15 +102,14 @@ def run_test_compiler(component_name: str, base_output_dir: str = "migrated-outp
             capture_output=True,
             text=True,
             env=env,
-            timeout=180 # 3 minute timeout
+            timeout=60  # 1 minute timeout for compilation
         )
 
-        trx_search = os.path.join(tests_dir, "TestResults", "results.trx")
-        if os.path.exists(trx_search):
+        if result.returncode == 0:
             report["compiled"] = True
-            print("✅ Compilation and test run completed successfully.")
+            print("✅ Test project compiled successfully.")
         else:
-            # Did not compile or no test results produced
+            # Compilation failed
             report["compiled"] = False
 
             # Extract compilation errors from output
@@ -116,13 +118,13 @@ def run_test_compiler(component_name: str, base_output_dir: str = "migrated-outp
                 if "error CS" in line or "Build FAILED" in line or "error NETSDK" in line:
                     build_errors.append(line.strip())
             report["errors"] = build_errors or [result.stdout[:2000]]
-            print("❌ Compilation or project build failed.")
+            print("❌ Test project compilation failed.")
 
     except subprocess.TimeoutExpired:
-        report["errors"].append("dotnet test execution timed out after 180 seconds.")
-        print("❌ dotnet test execution timed out.")
+        report["errors"].append("dotnet build timed out after 60 seconds.")
+        print("❌ Compilation timed out.")
     except Exception as e:
-        report["errors"].append(f"Unexpected error running tests: {str(e)}")
+        report["errors"].append(f"Unexpected error during compilation: {str(e)}")
         print(f"❌ Unexpected error: {e}")
 
     return report
