@@ -11,7 +11,6 @@ from typing import Dict, Optional, Tuple
 from input_handler import InputHandler, MigrationRequest
 from agents.staging_agent import StagingAgent
 from agents.explorer import explore_code
-from agents.extractor import extract_domain_logic
 from agents.modernizer import modernize_code
 from agents.bdd_test_cases_generator import generate_bdd_tests
 from agents.test_writer import TestWriter
@@ -36,7 +35,7 @@ class WorkflowState:
         """Move to next stage"""
         self.current_stage = stage_name
         print(f"\n{'='*70}")
-        print(f"[STAGE {len(self.completed_stages) + 1}/7] {stage_name.upper()}")
+        print(f"[STAGE {len(self.completed_stages) + 1}/6] {stage_name.upper()}")
         print(f"{'='*70}\n")
 
     def mark_stage_complete(self) -> None:
@@ -284,8 +283,8 @@ class OrchestratorV2:
         state.artifacts["exploration"] = exploration_results
         state.mark_stage_complete()
 
-        # STAGE 4: EXTRACTION
-        state.advance_stage("extraction")
+        # STAGE 4: MODERNIZATION
+        state.advance_stage("modernization")
         legacy_code_path = os.path.join("legacy-code", request.component_name)
 
         # Read all .cs files from the component directory
@@ -298,14 +297,7 @@ class OrchestratorV2:
         # Combine all file contents for analysis
         combined_legacy_code = "\n".join(component_files.values())
 
-        extraction = extract_domain_logic(combined_legacy_code, exploration_results)
-        self._save_output(request.component_name, "extracted_logic.md", extraction)
-        state.artifacts["extraction"] = extraction
-        state.mark_stage_complete()
-
-        # STAGE 5: MODERNIZATION
-        state.advance_stage("modernization")
-        modernized_code = modernize_code(combined_legacy_code, extraction, exploration_results)
+        modernized_code = modernize_code(combined_legacy_code, exploration_results, exploration_results)
         state.artifacts["modernization"] = modernized_code
 
         # Extract and save modernized code with appropriate filenames
@@ -315,9 +307,9 @@ class OrchestratorV2:
 
         state.mark_stage_complete()
 
-        # STAGE 6: BDD & TEST WRITING
+        # STAGE 5: BDD & TEST WRITING
         state.advance_stage("bdd_and_testing")
-        bdd_tests = generate_bdd_tests(extraction, modernized_code, exploration_results)
+        bdd_tests = generate_bdd_tests(exploration_results, modernized_code, exploration_results)
         self._save_output(request.component_name, os.path.join("tests", "scenarios.feature"), bdd_tests)
 
         # Generate executable tests from Gherkin (NEW)
@@ -346,7 +338,7 @@ class OrchestratorV2:
         state.artifacts["test_code"] = test_code if success else ""
         state.mark_stage_complete()
 
-        # STAGE 7: VERIFICATION (Compilation, Test Execution & Coverage)
+        # STAGE 6: VERIFICATION (Compilation, Test Execution & Coverage)
         state.advance_stage("verification")
         try:
             verification_results = run_tests_and_collect_coverage(request.component_name)
@@ -426,7 +418,7 @@ class OrchestratorV2:
         print("="*70)
         print(f"\nComponent: {state.request.component_name}")
         print(f"Status: {state.to_dict().get('status', 'unknown')}")
-        print(f"Completed Stages: {len(state.completed_stages)}/7")
+        print(f"Completed Stages: {len(state.completed_stages)}/6")
         print(f"Total Time: {state.to_dict().get('timestamp_end', 'Unknown')}")
 
         verification = state.artifacts.get("verification", {})
