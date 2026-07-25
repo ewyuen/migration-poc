@@ -21,10 +21,10 @@ class CompilerError:
 MIGRATION_HINTS = {
     # Compiler errors (CS*)
     "CS0103": "ConfigurationManager is from System.Configuration. Replace with IConfiguration dependency injection pattern or add NuGet: System.Configuration.ConfigurationManager.",
-    "CS0246": "Legacy System.Web types not available in .NET 10. Use ASP.NET Core equivalents (e.g., Microsoft.AspNetCore.Http).",
+    "CS0246": "Legacy System.Web types not available in .NET 10. Use ASP.NET Core equivalents (e.g., Microsoft.AspNetCore.Http). The Windows Compatibility Pack (Microsoft.Windows.Compatibility) provides many .NET Framework APIs for migration.",
     "CS0117": "Configuration APIs changed. Use IConfiguration injected via DI instead of WebConfigurationManager.",
     "CS1061": "HttpContext API differs. In ASP.NET Core, use context.Request/Response properties directly.",
-    "CS0234": "Missing namespace. Check if type moved to different NuGet package in modern .NET.",
+    "CS0234": "Missing namespace. Check if type moved to different NuGet package in modern .NET. Try adding Microsoft.Windows.Compatibility for .NET Framework compatibility.",
     "CS0619": "API is obsolete. Use modern equivalent (check documentation).",
     "CS1503": "Parameter type mismatch. Verify method signatures match modern .NET APIs.",
     "CS0535": "Interface member not implemented. Add all required members.",
@@ -33,6 +33,8 @@ MIGRATION_HINTS = {
     # NuGet errors (NU*)
     "NU1202": "Package version does not support the target framework. Update to a newer version that supports net10.0 or adjust .csproj TargetFramework.",
     "NU1605": "Downgrade warning - package requires a newer version. Update the package version to the latest that supports net10.0.",
+    # Build failures that couldn't be parsed
+    "BUILD_FAILED": "Build failed but specific errors couldn't be parsed. Check the raw error output above. Common issues: missing using statements, wrong API calls, or missing NuGet packages. Ensure all .NET Framework APIs are replaced with .NET 10 equivalents or covered by Microsoft.Windows.Compatibility.",
 }
 
 
@@ -55,7 +57,7 @@ class DotNetMigrationAgent:
         Path(output_dir).mkdir(parents=True, exist_ok=True)
 
     def generate_csproj(self, assembly_name: str, root_namespace: str) -> None:
-        """Generate SDK-style .csproj for net10.0"""
+        """Generate SDK-style .csproj for net10.0 with Windows compatibility pack"""
         csproj_content = f"""<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
@@ -67,6 +69,7 @@ class DotNetMigrationAgent:
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.Windows.Compatibility" Version="10.0.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.0" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
@@ -102,6 +105,20 @@ class DotNetMigrationAgent:
             # Parse errors (both restore and compilation)
             errors = self._parse_compiler_errors(full_output)
 
+            # CRITICAL: If build failed but no errors were parsed, something is wrong with error parsing
+            # Create a synthetic error to force LLM to see build failure
+            if not errors:
+                print(f"   ⚠️  Build failed but no errors parsed. Raw output for debugging:")
+                # Show first 500 chars of output for debugging
+                print(f"      {full_output[:500]}")
+                errors = [CompilerError(
+                    file_path="<build>",
+                    line=0,
+                    column=0,
+                    error_code="BUILD_FAILED",
+                    message=f"Build failed with exit code {result.returncode}. Unable to parse errors from output. Raw output: {full_output[:200]}"
+                )]
+
             # Check if this is a NuGet/restore error
             # (NuGet errors need .csproj fixes, not code fixes)
             nuget_errors = [e for e in errors if e.error_code.startswith("NU")]
@@ -123,13 +140,16 @@ class DotNetMigrationAgent:
             return False, [CompilerError("", 0, 0, "ERROR", str(e))], None
 
     def _parse_compiler_errors(self, build_output: str) -> List[CompilerError]:
-        """Parse errors: compiler (CSxxxx) and NuGet (NUxxxx)"""
+        """Parse errors: compiler (CSxxxx) and NuGet (NUxxxx) with fallback patterns"""
         errors = []
+        seen_codes = set()  # Track which errors we've found to avoid duplicates
 
         # Pattern 1: Compiler errors - path(line,col): error CSxxxx: message [project]
         cs_pattern = r"(.*?)\((\d+),(\d+)\):\s+error\s+(CS\d+):\s+(.*?)(?:\s*\[|$)"
         # Pattern 2: NuGet errors - path : error NUxxxx: message
         nu_pattern = r"(.*?)\s+:\s+error\s+(NU\d+):\s+(.*?)$"
+        # Pattern 3: Fallback - any error line with code pattern (DLxxxx, MSxxxx, etc.)
+        fallback_pattern = r":\s+error\s+([A-Z]+\d+):\s+(.*?)$"
 
         for line in build_output.splitlines():
             # Try compiler error pattern first
@@ -143,6 +163,7 @@ class DotNetMigrationAgent:
                     error_code=code.strip(),
                     message=msg.strip()
                 ))
+                seen_codes.add(code.strip())
                 continue
 
             # Try NuGet error pattern
@@ -156,6 +177,23 @@ class DotNetMigrationAgent:
                     error_code=code.strip(),
                     message=msg.strip()
                 ))
+                seen_codes.add(code.strip())
+                continue
+
+            # Try fallback pattern for other error codes (DL, MS, etc.)
+            if "error" in line.lower() and not any(skip in line for skip in ["warning", "info", "note"]):
+                match = re.search(fallback_pattern, line)
+                if match:
+                    code, msg = match.groups()
+                    if code not in seen_codes:  # Avoid duplicates
+                        errors.append(CompilerError(
+                            file_path="<unknown>",
+                            line=0,
+                            column=0,
+                            error_code=code.strip(),
+                            message=msg.strip()[:200]  # Truncate very long messages
+                        ))
+                        seen_codes.add(code)
 
         return errors
 
@@ -323,11 +361,16 @@ Output ONLY the modernized C# code in a ```csharp block."""
 
         # Show final errors for debugging
         if errors:
-            print(f"\nFinal compilation errors:")
-            for err in errors[:5]:
-                print(f"  [{err.error_code}] Line {err.line}: {err.message}")
-            if len(errors) > 5:
-                print(f"  ... and {len(errors) - 5} more errors")
+            print(f"\n⚠️  Final compilation errors (showing up to 10):")
+            for err in errors[:10]:
+                if err.error_code == "BUILD_FAILED":
+                    print(f"  [BUILD_FAILED] {err.message}")
+                else:
+                    print(f"  [{err.error_code}] Line {err.line}: {err.message}")
+            if len(errors) > 10:
+                print(f"  ... and {len(errors) - 10} more errors")
+        else:
+            print(f"\n⚠️  Build failed but no errors could be parsed. Check the build output above.")
 
         raise RuntimeError(f"Migration failed for {output_filename} after {self.max_retries} retries. Files preserved in {self.output_dir}")
 

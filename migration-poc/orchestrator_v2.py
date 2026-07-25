@@ -379,6 +379,22 @@ class OrchestratorV2:
                         f"<TargetFramework>{self.config['global'].get('target_framework', 'net10.0')}</TargetFramework>",
                         csproj_content
                     )
+                    # Ensure Windows Compatibility Pack is included for .NET Framework migration
+                    if "Microsoft.Windows.Compatibility" not in csproj_content:
+                        # Add compatibility pack to ItemGroup or create one
+                        if "<ItemGroup>" in csproj_content:
+                            csproj_content = csproj_content.replace(
+                                "<ItemGroup>",
+                                '<ItemGroup>\n    <PackageReference Include="Microsoft.Windows.Compatibility" Version="10.0.0" />'
+                            )
+                        else:
+                            # Add ItemGroup if missing
+                            csproj_content = csproj_content.replace(
+                                "</Project>",
+                                '\n  <ItemGroup>\n    <PackageReference Include="Microsoft.Windows.Compatibility" Version="10.0.0" />\n  </ItemGroup>\n</Project>'
+                            )
+                        print(f"   ✓ Added Windows Compatibility Pack to .csproj")
+
                     output_csproj_path = os.path.join(output_src_dir, csproj_name)
                     Path(os.path.dirname(output_csproj_path)).mkdir(parents=True, exist_ok=True)
                     with open(output_csproj_path, "w", encoding="utf-8") as f:
