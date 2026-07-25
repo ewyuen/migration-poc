@@ -111,5 +111,72 @@ class SkeletonReader:
                 "start_idx": start_idx,
                 "end_idx": close_brace_idx + 1
             })
-            
+
         return methods
+
+    @staticmethod
+    def find_class_blocks(content: str) -> List[Dict]:
+        """Find all `public class` blocks in the content, at any nesting level"""
+        classes = []
+        pattern = re.compile(r'public\s+class\s+(\w+)(?:\s*:\s*[\w<>,\s]+)?\s*\{')
+
+        for match in pattern.finditer(content):
+            open_brace_idx = content.find('{', match.start())
+            if open_brace_idx == -1:
+                continue
+            close_brace_idx = SkeletonReader.find_matching_brace(content, open_brace_idx)
+            if close_brace_idx == -1:
+                continue
+
+            classes.append({
+                "name": match.group(1),
+                "start_idx": match.start(),
+                "end_idx": close_brace_idx + 1
+            })
+
+        return classes
+
+    def extract_test_classes(self, content: str) -> List[Dict]:
+        """
+        Returns helper class blocks (e.g. TestFixture, FakeXxx) present in the file,
+        excluding the primary test container class (identified as whichever `public class`
+        block contains a [Fact] or [Theory] attribute) -- that class must never be
+        commented out.
+        """
+        helper_classes = []
+        for c in self.find_class_blocks(content):
+            body = content[c["start_idx"]:c["end_idx"]]
+            if re.search(r'\[(Fact|Theory)\]', body):
+                continue
+            helper_classes.append(c)
+        return helper_classes
+
+    @staticmethod
+    def line_to_offset(content: str, line_num: int) -> int:
+        """Convert a 1-based line number into a 0-based character offset into content"""
+        if line_num <= 0:
+            return 0
+        lines = content.splitlines(keepends=True)
+        if line_num > len(lines):
+            return len(content)
+        return sum(len(l) for l in lines[:line_num - 1])
+
+    @staticmethod
+    def locate_error(content: str, methods: List[Dict], classes: List[Dict], line_num: int) -> Optional[Dict]:
+        """
+        Given a 1-based line number (from a compiler error), determine which method or
+        class block contains it. Methods are checked first (more specific); falls back to
+        the enclosing helper class. Returns None if the line falls in neither (e.g. usings,
+        namespace declaration, or the primary test class container).
+        """
+        offset = SkeletonReader.line_to_offset(content, line_num)
+
+        for m in methods:
+            if m["start_idx"] <= offset < m["end_idx"]:
+                return {"kind": "method", "name": m["name"], "start_idx": m["start_idx"], "end_idx": m["end_idx"]}
+
+        for c in classes:
+            if c["start_idx"] <= offset < c["end_idx"]:
+                return {"kind": "class", "name": c["name"], "start_idx": c["start_idx"], "end_idx": c["end_idx"]}
+
+        return None

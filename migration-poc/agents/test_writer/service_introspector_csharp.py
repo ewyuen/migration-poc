@@ -90,12 +90,58 @@ class ServiceIntrospectorCSharp:
             }
 
     def _parse_interfaces(self, content: str) -> None:
-        """Parse public interfaces"""
-        interface_pattern = re.compile(r'public\s+interface\s+(\w+)\s*\{', re.DOTALL)
+        """Parse public interfaces and extract their method signatures"""
+        interface_pattern = re.compile(r'public\s+interface\s+(\w+)(?:\s*:\s*[\w<>, ]+)?\s*\{', re.DOTALL)
+
         for match in interface_pattern.finditer(content):
             interface_name = match.group(1)
-            # Just record existence for now
-            self.interfaces[interface_name] = {}
+            start_idx = match.start()
+
+            open_brace_idx = content.find('{', start_idx)
+            if open_brace_idx == -1:
+                continue
+
+            from agents.test_writer.skeleton_reader import SkeletonReader
+            close_brace_idx = SkeletonReader.find_matching_brace(content, open_brace_idx)
+            if close_brace_idx == -1:
+                interface_body = content[open_brace_idx + 1:]
+            else:
+                interface_body = content[open_brace_idx + 1:close_brace_idx]
+
+            self.interfaces[interface_name] = {
+                "methods": self._extract_interface_methods(interface_body)
+            }
+
+    def _extract_interface_methods(self, interface_body: str) -> List[Dict[str, Any]]:
+        """Extract method signatures declared directly in an interface body (no modifiers, no body)"""
+        pattern = re.compile(r'([\w<>\.\[\],\s]+?)\s+(\w+)\s*\((.*?)\)\s*;', re.DOTALL)
+        methods = []
+
+        for match in pattern.finditer(interface_body):
+            return_type = match.group(1).strip()
+            method_name = match.group(2)
+            params_str = match.group(3)
+
+            is_async = return_type.startswith("Task") or return_type.startswith("ValueTask")
+
+            params = []
+            if params_str.strip():
+                raw_params = params_str.split(',')
+                for rp in raw_params:
+                    parts = rp.strip().split()
+                    if len(parts) >= 2:
+                        param_type = parts[0].strip()
+                        param_name = parts[1].strip()
+                        params.append({"name": param_name, "type": param_type})
+
+            methods.append({
+                "name": method_name,
+                "is_async": is_async,
+                "return_type": return_type,
+                "parameters": params
+            })
+
+        return methods
 
     def _extract_constructor(self, class_name: str, class_body: str) -> List[Dict[str, str]]:
         """Extract constructor parameters"""

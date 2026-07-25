@@ -61,6 +61,16 @@ class FixtureGenerator:
     }""")
                     generated_fakes_set.add("FakeLogger")
 
+            # 2.75 Handle IConfiguration: a real framework interface whose members are never
+            # present in Stage-4-introspected source, so it must be wired to a real instance
+            # rather than faked (a generated fake would always be an empty, non-compiling stub).
+            elif p_type == "IConfiguration":
+                fields.append("        private readonly Microsoft.Extensions.Configuration.IConfiguration _configuration;")
+                setup_lines.append(
+                    "            _configuration = new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build();"
+                )
+                instantiation_args.append("_configuration")
+
             # 3. Handle Interface dependencies e.g. IUserRepository
             elif p_type.startswith("I") and p_type[1].isupper():
                 prop_name = p_type[1:]
@@ -125,26 +135,11 @@ class FixtureGenerator:
         Dynamically construct a Fake class for a given interface
         """
         fake_class_name = f"Fake{interface_name[1:]}"
-        
-        # Read the interface methods if discovered or mock them
-        # Let's check if the interface is in our introspected interfaces
-        # Since we might not have all methods introspected, we can parse them from the interface files.
-        # Let's design a simple fallback: for known interfaces, we hardcode, for others, we parse.
-        
-        methods = []
-        
-        # Let's inspect the files to see if we can find the interface declaration
-        # and parse its methods.
-        # If the interface is IUserRepository, we know its methods:
-        if interface_name == "IUserRepository":
-            methods = [
-                {"name": "ValidateUserAsync", "return_type": "Task<bool>", "parameters": [{"name": "email", "type": "string"}, {"name": "password", "type": "string"}]},
-                {"name": "IsUserLockedOutAsync", "return_type": "Task<bool>", "parameters": [{"name": "email", "type": "string"}]},
-                {"name": "RecordFailedAttemptAsync", "return_type": "Task", "parameters": [{"name": "email", "type": "string"}]},
-                {"name": "ResetFailedAttemptsAsync", "return_type": "Task", "parameters": [{"name": "email", "type": "string"}]},
-                {"name": "UserExistsAsync", "return_type": "Task<bool>", "parameters": [{"name": "email", "type": "string"}]}
-            ]
-        
+
+        # Build the fake from the interface's real, introspected method signatures
+        # (parsed from the actual Stage-4 source by ServiceIntrospectorCSharp).
+        methods = self.introspector.interfaces.get(interface_name, {}).get("methods", [])
+
         lines = []
         lines.append(f"    public class {fake_class_name} : {interface_name}")
         lines.append("    {")

@@ -6,15 +6,62 @@ Uses DeepSeek via OpenRouter for cost-effective, sequential agent orchestration.
 
 ## Architecture
 
+**6-Stage Migration Pipeline:**
+
 ```
-Orchestrator Agent
-  ├─ Explorer: Analyze legacy code & plan refactoring
-  ├─ Extractor: Extract pure domain logic
-  ├─ Modernizer: Translate to .NET 10
-  ├─ BDD Test Agent: Generate Gherkin test scenarios
-  ├─ Verifier: Validate correctness & compliance
-  └─ Results: JSON report + generated code files
+Stage 1: VALIDATION
+  └─ Verify component exists and is ready
+
+Stage 2: STAGING
+  └─ Copy component to legacy-code, create feature branch
+
+Stage 3: EXPLORATION
+  └─ Analyze code structure, extract domain logic
+
+Stage 4: MODERNIZATION (with compilation verification)
+  └─ Translate to .NET 10, generate .csproj
+
+Stage 5: BDD & TEST WRITING (with self-healing loop)
+  ├─ Generate Gherkin scenarios from modernized code
+  ├─ Create test skeleton (.Tests.cs)
+  └─ TestOrchestrator: Multi-attempt test generation
+      ├─ Attempt 1-4: Fill test skeletons, compile
+      ├─ Extract errors, retry with feedback
+      └─ On failure after 4 attempts: Comment out failing tests
+           (Tests are marked with TODO, not deleted)
+
+Stage 6: VERIFICATION
+  └─ Compile final tests, execute, collect coverage
+      Reports: pass/fail counts, coverage %, commented tests
 ```
+
+## Self-Healing Test Generation
+
+**What are "commented tests"?**
+
+When Stage 5 (Test Writing) encounters a test method that won't compile after 4 retry attempts, it gracefully "comments it out" rather than failing the pipeline. The test method is wrapped in `/* ... */` comments and preceded by a TODO marker:
+
+```csharp
+// TODO: Fix compilation error - test needs dependencies to be defined
+/*
+    [Fact]
+    public void TestMethod_ShouldDoSomething()
+    {
+        // Test implementation that couldn't compile
+    }
+*/
+```
+
+**Why?** This keeps the pipeline flowing and allows verification to run and report. The commented tests are visible in the final test file for human review—nothing is hidden.
+
+**How to review:**
+1. Check the Test Orchestration report in `migrated-output/{component}/audit/`
+2. Look for `commented_tests` in the workflow state
+3. Open the final `.Tests.cs` file and search for `// TODO: Fix compilation` to find commented tests
+4. Review the error messages and decide whether to:
+   - Fix the test implementation manually
+   - Skip that test for now
+   - Investigate missing dependencies
 
 ## Quick Start
 
@@ -51,12 +98,14 @@ Results are saved to `output/`:
 
 ## Key Features
 
-✅ **Sequential Agent Orchestration** - Clear handoff between agents
+✅ **6-Stage Pipeline** - Validation → Staging → Exploration → Modernization → Test Writing → Verification
+✅ **Self-Healing Test Generation** - Up to 4 retry attempts with error feedback; gracefully comments out failing tests
 ✅ **Domain Logic Extraction** - Pure business logic separated from infrastructure
 ✅ **BDD Test Generation** - Gherkin scenarios for medical workflows
 ✅ **Compliance Verification** - 21 CFR Part 11 checks
 ✅ **Cost-Effective** - Uses DeepSeek via OpenRouter (~$0.27/1M tokens)
-✅ **Transparent** - All agent outputs saved for review
+✅ **Resilient** - Pipeline continues even if some tests can't be fixed (commented out with TODO)
+✅ **Transparent** - All agent outputs saved for review, audit trail recorded
 ✅ **.NET 10 Target** - Modern C# 14 patterns and async-first design
 
 ## For the Interview

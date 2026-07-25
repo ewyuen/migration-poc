@@ -16,6 +16,7 @@ from agents.modernizer import modernize_code
 from agents.bdd_test_cases_generator import generate_bdd_tests
 from agents.test_writer import TestWriter
 from agents.test_writer_stage import TestWriterStage
+from agents.test_orchestrator import TestOrchestrator
 from agents.verifier import run_tests_and_collect_coverage
 from config import OUTPUT_DIR, TARGET_FRAMEWORK, COMPLIANCE_CONTEXT, DOMAIN
 
@@ -79,6 +80,7 @@ class OrchestratorV2:
         self.staging_agent = StagingAgent()
         self.test_writer = TestWriter()
         self.test_writer_stage = TestWriterStage(config=self.config.get("test_writer"))
+        self.test_orchestrator = TestOrchestrator(config=self.config.get("test_orchestrator"))
         self.audit_dir = self.config.get("global", {}).get("audit_dir", "migration-poc/audit")
         Path(self.audit_dir).mkdir(parents=True, exist_ok=True)
 
@@ -424,29 +426,58 @@ class OrchestratorV2:
         state.advance_stage("bdd_and_testing")
         modernized_code_str = "\n\n".join(all_modernized_code.values())
         bdd_tests = generate_bdd_tests(modernized_code_str, modernized_code_str, exploration_results)
-        self._save_output(request.component_name, os.path.join("tests", "scenarios.feature"), bdd_tests)
+        self._save_output(request.component_name, "scenarios.feature", bdd_tests)
 
         # Generate executable tests from Gherkin (NEW)
         success, error, test_code = self.test_writer.write_tests_from_gherkin(
             bdd_tests,
             request.component_name,
-            self._save_output(request.component_name, os.path.join("tests", f"{request.component_name}.Tests.cs"), "")
+            self._save_output(request.component_name, f"{request.component_name}.Tests.cs", "")
         )
 
         if success:
-            self._save_output(request.component_name, os.path.join("tests", f"{request.component_name}.Tests.cs"), test_code)
-            # Run TestWriterStage to implement the skeleton test methods with real code
-            print("🖋️ Running TestWriterStage to implement skeletons...")
-            writer_stage_result = self.test_writer_stage.execute(request.component_name)
-            if writer_stage_result["status"] == "success":
-                print("✅ TestWriterStage successfully completed and filled all skeletons!")
-                # Read the updated test code to save it in workflow state artifacts
-                test_file_path = os.path.join("migrated-output", request.component_name, "tests", f"{request.component_name}.Tests.cs")
-                if os.path.exists(test_file_path):
-                    with open(test_file_path, "r", encoding="utf-8") as f:
-                        test_code = f.read()
+            self._save_output(request.component_name, f"{request.component_name}.Tests.cs", test_code)
+            # Run TestOrchestrator for self-healing test generation and compilation
+            print("🔄 Running TestOrchestrator for self-healing test generation...")
+            orchestrator_result = self.test_orchestrator.execute(request.component_name)
+
+            # Check orchestration compilation result
+            if orchestrator_result.get("compiled"):
+                print(f"✅ TestOrchestrator succeeded (attempts: {orchestrator_result.get('attempts', 'unknown')})")
             else:
-                print(f"⚠️ TestWriterStage completed with issues/errors: {writer_stage_result.get('errors', [])}")
+                print(f"❌ TestOrchestrator failed to compile tests after {orchestrator_result.get('attempts', 'unknown')} attempts")
+
+            # Read the updated test code from disk after orchestration completes
+            test_file_path = os.path.join("migrated-output", request.component_name, "tests", f"{request.component_name}.Tests.cs")
+            if os.path.exists(test_file_path):
+                with open(test_file_path, "r", encoding="utf-8") as f:
+                    test_code = f.read()
+            else:
+                print(f"⚠️ Test file not found after orchestration: {test_file_path}")
+
+            # Report commented tests/classes if any
+            commented_tests = orchestrator_result.get("commented_tests", [])
+            commented_classes = orchestrator_result.get("commented_classes", [])
+            uncommentable_errors = orchestrator_result.get("uncommentable_errors", [])
+            if commented_tests:
+                print(f"⚠️ {len(commented_tests)} test methods were commented out due to compilation issues:")
+                for test_name in commented_tests[:5]:
+                    print(f"   - {test_name}")
+                if len(commented_tests) > 5:
+                    print(f"   ... and {len(commented_tests) - 5} more")
+            if commented_classes:
+                print(f"⚠️ {len(commented_classes)} helper classes were commented out due to compilation issues:")
+                for class_name in commented_classes[:5]:
+                    print(f"   - {class_name}")
+                if len(commented_classes) > 5:
+                    print(f"   ... and {len(commented_classes) - 5} more")
+            if uncommentable_errors:
+                print(f"⚠️ {len(uncommentable_errors)} compilation error(s) could not be mapped to a test/class (likely Stage 4 source or project-level issues) and remain unresolved.")
+
+            # Capture orchestration result
+            state.artifacts["test_orchestration"] = orchestrator_result
+
+            # Note: Stage 5 completes regardless of commented tests; verification stage will report status
 
         state.artifacts["bdd"] = bdd_tests
         state.artifacts["test_code"] = test_code if success else ""
@@ -455,7 +486,12 @@ class OrchestratorV2:
         # STAGE 6: VERIFICATION (Compilation, Test Execution & Coverage)
         state.advance_stage("verification")
         try:
-            verification_results = run_tests_and_collect_coverage(request.component_name)
+            test_orchestration = state.artifacts.get("test_orchestration", {})
+            verification_results = run_tests_and_collect_coverage(
+                request.component_name,
+                commented_tests=test_orchestration.get("commented_tests", []),
+                commented_classes=test_orchestration.get("commented_classes", []),
+            )
             state.artifacts["verification"] = verification_results
             if verification_results.get("status") == "PASS":
                 state.mark_stage_complete()
