@@ -66,66 +66,46 @@ class DotNetMigrationAgent:
             f.write(csproj_content)
         print(f"📦 Generated: {self.csproj_path}")
 
-    def run_dotnet_restore(self) -> bool:
-        """Restore NuGet packages before building"""
-        cmd = ["dotnet", "restore", self.csproj_path]
-        print(f"   📦 Restoring NuGet packages...")
+    def run_dotnet_build(self) -> tuple[bool, List[CompilerError], Optional[str]]:
+        """Execute standard 'dotnet build' and parse ALL errors (restore + compilation)"""
+        print(f"   🔨 Building (dotnet build)...")
+        cmd = ["dotnet", "build"]
+
         try:
             result = subprocess.run(
                 cmd,
                 cwd=self.output_dir,
                 capture_output=True,
                 text=True,
-                timeout=60
+                timeout=120
             )
+
             if result.returncode == 0:
-                print(f"   ✓ Packages restored")
-                return True
-            else:
-                print(f"   ❌ Restore failed:")
-                print(f"      {result.stderr[:300]}")
-                return False
+                return True, [], None
+
+            # Capture full output for error analysis
+            full_output = result.stdout + result.stderr
+
+            # Check if this is a restore error or compilation error
+            is_restore_error = "NU" in full_output or "restore" in full_output.lower() or "package" in full_output.lower()
+
+            # Parse errors (both restore and compilation)
+            errors = self._parse_compiler_errors(full_output)
+
+            # If restore error detected, return full output so LLM can fix .csproj
+            if is_restore_error and not errors:
+                # Extract package/restore error message
+                error_msg = full_output[-1000:]  # Last 1000 chars likely has the error
+                return False, [], error_msg
+
+            return False, errors, None
+
         except subprocess.TimeoutExpired:
-            print(f"   ❌ Restore timeout (60s)")
-            return False
-        except Exception as e:
-            print(f"   ❌ Restore error: {e}")
-            return False
-
-    def run_dotnet_build(self) -> tuple[bool, List[CompilerError]]:
-        """Restore packages, then execute dotnet build and parse compiler errors"""
-        # First: restore packages
-        restore_ok = self.run_dotnet_restore()
-
-        # Then: build
-        cmd = ["dotnet", "build", self.csproj_path, "-c", "Debug"]
-        print(f"   🔨 Building...")
-        try:
-            result = subprocess.run(
-                cmd,
-                cwd=self.output_dir,
-                capture_output=True,
-                text=True,
-                timeout=60
-            )
-            if result.returncode == 0:
-                return True, []
-
-            # Parse errors
-            errors = self._parse_compiler_errors(result.stdout + result.stderr)
-
-            # Show raw output if no errors parsed (helps debug)
-            if not errors and result.stderr:
-                print(f"   ⚠️  Build failed but no CS errors parsed. Raw output:")
-                print(f"      {result.stderr[:500]}")
-
-            return False, errors
-        except subprocess.TimeoutExpired:
-            print(f"   ❌ Build timeout (60s)")
-            return False, [CompilerError("", 0, 0, "TIMEOUT", "Build timeout after 60s")]
+            print(f"   ❌ Build timeout (120s)")
+            return False, [CompilerError("", 0, 0, "TIMEOUT", "Build timeout after 120s")], None
         except Exception as e:
             print(f"   ❌ Build error: {e}")
-            return False, [CompilerError("", 0, 0, "ERROR", str(e))]
+            return False, [CompilerError("", 0, 0, "ERROR", str(e))], None
 
     def _parse_compiler_errors(self, build_output: str) -> List[CompilerError]:
         """Parse MSBuild error lines: path(line,col): error CSxxxx: message"""
@@ -172,6 +152,36 @@ class DotNetMigrationAgent:
 5. No explanations, just code.
 """
         return prompt
+
+    def generate_csproj_repair_prompt(self, csproj_content: str, restore_error: str) -> str:
+        """Generate prompt for LLM to fix .csproj file"""
+        prompt = f"""You are a .NET expert. Fix the .csproj file to resolve the NuGet restore error.
+
+### RESTORE ERROR:
+{restore_error}
+
+### CURRENT .CSPROJ:
+```xml
+{csproj_content}
+```
+
+### INSTRUCTIONS:
+1. Analyze the error and determine what packages are missing or misconfigured
+2. Add missing package references or fix existing ones
+3. Ensure all package versions are compatible with net10.0
+4. Output ONLY the complete, valid .csproj XML in a ```xml block
+5. Do NOT remove PropertyGroup settings or other project configuration
+6. No explanations, just the corrected XML file.
+"""
+        return prompt
+
+    def _extract_xml(self, response: str) -> str:
+        """Extract XML from markdown response"""
+        pattern = r"```xml\s*(.*?)\s*```"
+        match = re.search(pattern, response, re.DOTALL)
+        if match:
+            return match.group(1).strip()
+        return response.strip()
 
     def _extract_csharp_code(self, response: str) -> str:
         """Extract C# code from markdown response"""
@@ -223,23 +233,43 @@ Output ONLY the modernized C# code in a ```csharp block."""
         # Step 2: Self-healing compilation loop
         for attempt in range(1, self.max_retries + 1):
             print(f"\n🔨 Compilation Attempt {attempt}/{self.max_retries}...")
-            success, errors = self.run_dotnet_build()
+            success, errors, restore_error = self.run_dotnet_build()
 
             if success:
                 print(f"✅ BUILD SUCCEEDED! {output_filename} is ready for .NET 10.")
                 return current_code
 
-            # Filter errors for this file
-            file_errors = [e for e in errors if os.path.basename(e.file_path) == output_filename]
-            if not file_errors:
-                file_errors = errors  # Use all if file filtering didn't match
+            # Handle restore errors by asking LLM to fix .csproj
+            if restore_error:
+                print(f"❌ Package restore error detected. Asking LLM to fix .csproj...")
+                csproj_path = os.path.join(self.output_dir, self.csproj_name)
+                with open(csproj_path, "r", encoding="utf-8") as f:
+                    csproj_content = f.read()
 
-            print(f"❌ {len(file_errors)} error(s) found. Calling LLM to repair...")
-            for err in file_errors[:3]:  # Show first 3 errors
+                # Ask LLM to fix .csproj
+                csproj_repair_prompt = self.generate_csproj_repair_prompt(csproj_content, restore_error)
+                csproj_response = llm_call_func(csproj_repair_prompt)
+                fixed_csproj = self._extract_xml(csproj_response)
+
+                # Write fixed .csproj
+                with open(csproj_path, "w", encoding="utf-8") as f:
+                    f.write(fixed_csproj)
+                print(f"   → .csproj updated by LLM. Retrying...")
+                continue
+
+            # Handle compilation errors by asking LLM to fix .cs file
+            if not errors:
+                print(f"❌ Build failed but no errors parsed. Full output:")
+                print(f"   {restore_error if restore_error else 'Check console output above'}")
+                continue
+
+            # Show and repair compilation errors
+            print(f"❌ {len(errors)} error(s) found. Calling LLM to repair code...")
+            for err in errors[:5]:  # Show first 5 errors
                 print(f"   [{err.error_code}] Line {err.line}: {err.message[:60]}")
 
-            # Repair via LLM
-            repair_prompt = self.generate_repair_prompt(current_code, file_errors)
+            # Repair via LLM with ALL errors
+            repair_prompt = self.generate_repair_prompt(current_code, errors)
             response = llm_call_func(repair_prompt)
             current_code = self._extract_csharp_code(response)
 

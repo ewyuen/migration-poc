@@ -177,7 +177,7 @@ def test_end_to_end_modernization():
 
             # Verify: Code compiles
             print(f"\n🔨 Verifying compilation...")
-            success, errors = agent.run_dotnet_build()
+            success, errors, restore_error = agent.run_dotnet_build()
             if success:
                 print(f"✅ BUILD SUCCEEDED")
             else:
