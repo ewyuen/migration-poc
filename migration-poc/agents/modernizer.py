@@ -57,9 +57,8 @@ class DotNetMigrationAgent:
         Path(output_dir).mkdir(parents=True, exist_ok=True)
 
     def generate_csproj(self, assembly_name: str, root_namespace: str) -> None:
-        """Generate minimal SDK-style .csproj for net10.0 with only verified-compatible packages"""
-        # NOTE: Only include packages we know are compatible with net10.0
-        # Let LLM add others as needed during migration
+        """Generate SDK-style .csproj for net10.0 with essential packages"""
+        # Include packages commonly needed for .NET Framework migrations
         csproj_content = f"""<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
@@ -72,16 +71,19 @@ class DotNetMigrationAgent:
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Verified net10.0 compatible packages only -->
+    <!-- Essential packages for .NET Framework → .NET 10 migration (net10.0 verified) -->
     <PackageReference Include="Microsoft.Windows.Compatibility" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
   </ItemGroup>
 
 </Project>
 """
         with open(self.csproj_path, "w", encoding="utf-8") as f:
             f.write(csproj_content)
-        print(f"📦 Generated minimal .csproj: {self.csproj_path}")
-        print(f"   ✓ Only includes Microsoft.Windows.Compatibility (net10.0 verified)")
+        print(f"📦 Generated .csproj: {self.csproj_path}")
+        print(f"   ✓ Includes essential migration packages (all net10.0 verified)")
 
     def run_dotnet_build(self) -> tuple[bool, List[CompilerError], Optional[str]]:
         """Execute standard 'dotnet build' and parse ALL errors (restore + compilation)"""
@@ -316,12 +318,18 @@ TARGET GOALS:
 4. Preserve business logic and class names
 5. Target .NET 10 (remove .NET Framework dependencies)
 
+CRITICAL: Include ALL required using statements:
+- using System; (for DateTime, Convert, ArgumentException, etc.)
+- using Microsoft.Extensions.Configuration; (for IConfiguration)
+- using System.Threading.Tasks; (for async/await)
+- Any other using statements the code needs
+
 LEGACY CODE:
 ```csharp
 {initial_code}
 ```
 
-Output ONLY the modernized C# code in a ```csharp block."""
+Output ONLY the complete, modernized C# code with ALL using statements in a ```csharp block."""
 
         print(f"📝 Calling LLM for initial migration...")
         try:
