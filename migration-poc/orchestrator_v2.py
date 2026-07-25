@@ -13,6 +13,7 @@ from agents.staging_agent import StagingAgent
 from agents.explorer import explore_code
 from agents.extractor import extract_domain_logic
 from agents.modernizer import modernize_code
+from agents.modernization_orchestrator import ModernizationOrchestrator
 from agents.bdd_test_cases_generator import generate_bdd_tests
 from agents.test_writer import TestWriter
 from agents.test_writer_stage import TestWriterStage
@@ -78,6 +79,7 @@ class OrchestratorV2:
         self.config = self._load_config()
         self.input_handler = InputHandler()
         self.staging_agent = StagingAgent()
+        self.modernization_orchestrator = ModernizationOrchestrator(config=self.config.get("modernization"))
         self.test_writer = TestWriter()
         self.test_writer_stage = TestWriterStage(config=self.config.get("test_writer"))
         self.test_orchestrator = TestOrchestrator(config=self.config.get("test_writer"))
@@ -305,12 +307,46 @@ class OrchestratorV2:
         state.artifacts["extraction"] = extraction
         state.mark_stage_complete()
 
-        # STAGE 5: MODERNIZATION
+        # STAGE 5: MODERNIZATION WITH SELF-HEALING COMPILATION VERIFICATION
         state.advance_stage("modernization")
-        modernized_code = modernize_code(combined_legacy_code, extraction, exploration_results)
+        print("🔄 Running self-healing Modernization Orchestrator loop...")
+        modernization_report = self.modernization_orchestrator.execute(
+            request.component_name,
+            modernize_code,
+            combined_legacy_code,
+            extraction,
+            exploration_results
+        )
+
+        if not modernization_report["compiled"]:
+            # Modernization failed - skip test generation and go to verifier
+            print(f"❌ Modernization failed after {modernization_report['attempts']} attempts")
+            state.mark_stage_failed(f"Modernization failed: code would not compile after {modernization_report['attempts']} attempts")
+            state.artifacts["modernization"] = modernization_report
+
+            # Run verifier to report failure
+            state.advance_stage("verification")
+            try:
+                verification_results = verify_test_results(request.component_name, {
+                    "compiled": False,
+                    "errors": [f"Modernization failed: {e['message']}" for e in modernization_report.get("errors", [])],
+                    "tests_dir": os.path.join("migrated-output", request.component_name, "tests"),
+                    "commented_tests": [],
+                    "modernization_failed": True,
+                    "modernization_errors": modernization_report.get("errors", [])
+                })
+                state.artifacts["verification"] = verification_results
+            except Exception as e:
+                state.mark_stage_failed(f"Error reporting modernization failure: {str(e)}")
+
+            self._log_workflow(state)
+            self._print_summary(state)
+            return state.to_dict()
+
+        # Modernization succeeded - extract and save modernized code
+        modernized_code = modernization_report["modernized_code"]
         state.artifacts["modernization"] = modernized_code
 
-        # Extract and save modernized code with appropriate filenames
         modernized_files = self._parse_modernized_files(modernized_code, component_files.keys())
         for filename, content in modernized_files.items():
             self._save_output(request.component_name, filename, content)

@@ -259,7 +259,82 @@ def run_tests_and_collect_coverage(component_name: str, base_output_dir: str = "
 
     # 3. Generate Reports
     _write_reports(component_name, report)
-    
+
+    return report
+
+
+def verify_test_results(component_name: str, runner_report: dict, base_output_dir: str = "migrated-output") -> dict:
+    """
+    Parses test execution results and generates reports.
+    Handles both test execution reports and modernization failure reports.
+    """
+    # Check if this is a modernization failure report
+    if runner_report.get("modernization_failed"):
+        report = {
+            "status": "FAIL",
+            "compiled": False,
+            "total_tests": 0,
+            "passed_tests": 0,
+            "failed_tests": 0,
+            "skipped_tests": 0,
+            "line_coverage": 0.0,
+            "branch_coverage": 0.0,
+            "failures": [],
+            "errors": runner_report.get("errors", []),
+            "commented_tests": [],
+            "attempts": 0,
+            "modernization_failed": True,
+            "modernization_errors": runner_report.get("modernization_errors", [])
+        }
+        _write_reports(component_name, report)
+        return report
+
+    # Otherwise, parse test results
+    tests_dir = runner_report.get("tests_dir", os.path.join(base_output_dir, component_name, "tests"))
+    report = {
+        "status": "FAIL",
+        "compiled": runner_report.get("compiled", False),
+        "total_tests": 0,
+        "passed_tests": 0,
+        "failed_tests": 0,
+        "skipped_tests": 0,
+        "line_coverage": 0.0,
+        "branch_coverage": 0.0,
+        "failures": [],
+        "errors": runner_report.get("errors", []),
+        "commented_tests": runner_report.get("commented_tests", []),
+        "attempts": runner_report.get("attempts", 0),
+        "modernization_failed": False,
+        "modernization_errors": []
+    }
+
+    if runner_report.get("compiled"):
+        trx_search = os.path.join(tests_dir, "TestResults", "results.trx")
+        if os.path.exists(trx_search):
+            total, passed, failed, skipped, failures = _parse_trx_results(trx_search)
+            report["total_tests"] = total
+            report["passed_tests"] = passed
+            report["failed_tests"] = failed
+            report["skipped_tests"] = skipped
+            report["failures"] = failures
+
+            if failed == 0 and total > 0:
+                report["status"] = "PASS"
+            else:
+                report["status"] = "FAIL"
+
+            # Parse coverage
+            line_cov, branch_cov = _parse_coverage_results(tests_dir)
+            report["line_coverage"] = line_cov
+            report["branch_coverage"] = branch_cov
+        else:
+            report["status"] = "FAIL"
+            report["errors"].append("TRX test result file not found.")
+    else:
+        report["status"] = "FAIL"
+
+    # Save reports
+    _write_reports(component_name, report)
     return report
 
 
@@ -268,11 +343,11 @@ def _write_reports(component_name: str, report: dict) -> None:
     # Create output folders
     log_dir = os.path.join("migrated-output", "result-log")
     Path(log_dir).mkdir(parents=True, exist_ok=True)
-    
+
     # Create Markdown report
     status_emoji = "✅" if report["status"] == "PASS" else "❌"
     compile_emoji = "✅" if report["compiled"] else "❌"
-    
+
     md_content = f"""# Verification & Coverage Report: {component_name}
 
 ## Summary
@@ -282,23 +357,40 @@ def _write_reports(component_name: str, report: dict) -> None:
 - **Passed**: {report["passed_tests"]}
 - **Failed**: {report["failed_tests"]}
 - **Skipped**: {report["skipped_tests"]}
+- **Commented Out Tests**: {len(report.get("commented_tests", []))}
 - **Line Coverage**: {report["line_coverage"]:.2f}%
 - **Branch Coverage**: {report["branch_coverage"]:.2f}%
 
 """
 
-    if not report["compiled"]:
+    # Handle modernization failures
+    if report.get("modernization_failed"):
+        md_content += "## ❌ Modernization Failed\n\n"
+        md_content += "The modernized code failed to compile after maximum attempts.\n\n"
+        md_content += "### Compilation Errors\n"
+        for error in report.get("modernization_errors", []):
+            md_content += f"- **Line {error.get('line', '?')}**: [{error.get('error_code', 'ERROR')}] {error.get('message', 'Unknown error')}\n"
+        md_content += "\n"
+
+    if report.get("commented_tests"):
+        md_content += "## Commented Out Tests (After Max Attempts)\n"
+        md_content += "The following tests could not be fixed after max attempts and were commented out:\n"
+        for test_name in report["commented_tests"]:
+            md_content += f"- `{test_name}` - **TODO: Fix compilation error - test needs dependencies to be defined**\n"
+        md_content += "\n"
+
+    if not report["compiled"] and not report.get("modernization_failed"):
         md_content += "## Build/Compilation Errors\n```\n"
-        md_content += "\n".join(report["errors"])
+        md_content += "\n".join(report.get("errors", [])[:20])
         md_content += "\n```\n"
     elif report["failed_tests"] > 0:
         md_content += "## Failed Tests Details\n"
-        for fail in report["failures"]:
+        for fail in report.get("failures", []):
             md_content += f"### ❌ {fail['test_name']}\n"
             md_content += f"**Error Message**:\n```\n{fail['message']}\n```\n"
             md_content += f"**Stack Trace**:\n```\n{fail['stack_trace']}\n```\n"
             md_content += "---\n"
-    else:
+    elif not report.get("modernization_failed"):
         md_content += "🎉 All tests passed successfully with zero failures!\n"
 
     # Write Markdown to tests folder
