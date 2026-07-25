@@ -139,15 +139,40 @@ class OrchestratorV2:
         return None
 
     def _read_component_files(self, component_path: str) -> Dict[str, str]:
-        """Read all .cs files from component directory with their names"""
+        """Read only source .cs files (skip obj/, bin/, and generated files)"""
         files_content = {}
         try:
+            # Exclude generated directories and files
+            excluded_dirs = {"obj", "bin", ".vs", "packages"}
+            excluded_patterns = {
+                "AssemblyAttributes",
+                "AssemblyInfo",
+                ".AssemblyAttributes.",
+                "TemporaryGeneratedFile"
+            }
+
             for root, dirs, files in os.walk(component_path):
+                # Skip excluded directories
+                dirs[:] = [d for d in dirs if d not in excluded_dirs]
+
+                # Only process files in root or first level (actual source files)
+                # Skip nested directories from obj/, bin/, etc.
+                if any(exc in root for exc in excluded_dirs):
+                    continue
+
                 for file in files:
+                    # Skip generated files
                     if file.endswith(".cs"):
+                        # Exclude generated/framework files
+                        if any(pattern in file for pattern in excluded_patterns):
+                            print(f"⊘ Skipping generated file: {file}")
+                            continue
+
                         filepath = os.path.join(root, file)
                         with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
                             files_content[file] = f.read()
+                            print(f"✓ Reading source file: {file}")
+
         except Exception as e:
             print(f"⚠️  Error reading component files: {e}")
         return files_content
