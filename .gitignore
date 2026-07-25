@@ -56,6 +56,8 @@ pip-delete-this-directory.txt
 .vscode/
 bin/
 obj/
+**/bin/
+**/obj/
 *.csproj.user
 *.sln.DotSettings
 *.sln.DotSettings.user
@@ -238,6 +240,10 @@ migration-poc/output/
 # NOTE: Keep legacy-code/ for review, but ignore large build artifacts
 legacy-code/*/bin/
 legacy-code/*/obj/
+legacy-code/**/*.bin/
+legacy-code/**/*.obj/
+legacy-code/**/**/bin/
+legacy-code/**/**/obj/
 legacy-code/*/.vs/
 legacy-code/*/.vscode/
 legacy-code/*/venv/
