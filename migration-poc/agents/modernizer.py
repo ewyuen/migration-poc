@@ -57,7 +57,9 @@ class DotNetMigrationAgent:
         Path(output_dir).mkdir(parents=True, exist_ok=True)
 
     def generate_csproj(self, assembly_name: str, root_namespace: str) -> None:
-        """Generate SDK-style .csproj for net10.0 with Windows compatibility pack"""
+        """Generate minimal SDK-style .csproj for net10.0 with only verified-compatible packages"""
+        # NOTE: Only include packages we know are compatible with net10.0
+        # Let LLM add others as needed during migration
         csproj_content = f"""<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
@@ -66,21 +68,20 @@ class DotNetMigrationAgent:
     <RootNamespace>{root_namespace}</RootNamespace>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
+    <Deterministic>false</Deterministic>
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Verified net10.0 compatible packages only -->
     <PackageReference Include="Microsoft.Windows.Compatibility" Version="10.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.0" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
-    <PackageReference Include="System.Configuration.ConfigurationManager" Version="10.0.0" />
   </ItemGroup>
 
 </Project>
 """
         with open(self.csproj_path, "w", encoding="utf-8") as f:
             f.write(csproj_content)
-        print(f"📦 Generated: {self.csproj_path}")
+        print(f"📦 Generated minimal .csproj: {self.csproj_path}")
+        print(f"   ✓ Only includes Microsoft.Windows.Compatibility (net10.0 verified)")
 
     def run_dotnet_build(self) -> tuple[bool, List[CompilerError], Optional[str]]:
         """Execute standard 'dotnet build' and parse ALL errors (restore + compilation)"""
@@ -97,10 +98,18 @@ class DotNetMigrationAgent:
             )
 
             if result.returncode == 0:
+                print(f"   ✅ Build succeeded!")
                 return True, [], None
 
             # Capture full output for error analysis
             full_output = result.stdout + result.stderr
+
+            # ALWAYS log the build output for debugging
+            print(f"\n   📋 Build output (exit code {result.returncode}):")
+            output_lines = full_output.split('\n')
+            for line in output_lines[-20:]:  # Show last 20 lines
+                if line.strip():
+                    print(f"      {line}")
 
             # Parse errors (both restore and compilation)
             errors = self._parse_compiler_errors(full_output)
@@ -108,15 +117,23 @@ class DotNetMigrationAgent:
             # CRITICAL: If build failed but no errors were parsed, something is wrong with error parsing
             # Create a synthetic error to force LLM to see build failure
             if not errors:
-                print(f"   ⚠️  Build failed but no errors parsed. Raw output for debugging:")
-                # Show first 500 chars of output for debugging
-                print(f"      {full_output[:500]}")
+                print(f"\n   ⚠️  Build failed (exit {result.returncode}) but no errors parsed!")
+                print(f"   This means our regex patterns don't match the error format.")
+                print(f"   Full build output saved below:")
+                # Save full output for inspection
+                error_snapshot = full_output[:800]
+                print(f"\n   --- Full Output Start ---")
+                for line in error_snapshot.split('\n'):
+                    if line.strip():
+                        print(f"   {line}")
+                print(f"   --- Full Output End ---\n")
+
                 errors = [CompilerError(
-                    file_path="<build>",
+                    file_path="<build-system>",
                     line=0,
                     column=0,
                     error_code="BUILD_FAILED",
-                    message=f"Build failed with exit code {result.returncode}. Unable to parse errors from output. Raw output: {full_output[:200]}"
+                    message=f"Build failed with exit code {result.returncode}. Check .csproj and ensure all package versions are compatible with net10.0. Raw error: {full_output[:400]}"
                 )]
 
             # Check if this is a NuGet/restore error
@@ -207,7 +224,8 @@ class DotNetMigrationAgent:
                 f"  Hint: {hint}\n"
             )
 
-        prompt = f"""You are a .NET modernization expert. Fix ALL compilation errors in this .NET 10 C# code.
+        prompt = f"""You are a .NET 10 modernization expert. Fix ALL compilation errors in this C# code.
+Target framework: .NET 10.0 (net10.0)
 
 ### COMPILATION ERRORS:
 {error_context}
@@ -218,19 +236,21 @@ class DotNetMigrationAgent:
 ```
 
 ### INSTRUCTIONS:
-1. Fix EVERY error listed above.
-2. Preserve business logic and class names (do not rename).
-3. Use modern .NET 10 patterns: IConfiguration DI, async/await, records.
-4. Output ONLY valid C# code in a ```csharp block.
-5. No explanations, just code.
+1. Fix EVERY error listed above
+2. Ensure all APIs and namespaces are available in .NET 10
+3. For legacy .NET Framework types, replace with modern equivalents or use Microsoft.Windows.Compatibility
+4. Preserve business logic and class names (do not rename)
+5. Use modern .NET 10 patterns: IConfiguration DI, async/await, records, file-scoped namespaces
+6. Output ONLY valid, compilable C# code in a ```csharp block
+7. No explanations, just the fixed code
 """
         return prompt
 
     def generate_csproj_repair_prompt(self, csproj_content: str, restore_error: str) -> str:
         """Generate prompt for LLM to fix .csproj file"""
-        prompt = f"""You are a .NET expert. Fix the .csproj file to resolve the NuGet restore error.
+        prompt = f"""You are a .NET 10 project expert. Fix the .csproj file to resolve the NuGet restore/build error.
 
-### RESTORE ERROR:
+### ERROR MESSAGE:
 {restore_error}
 
 ### CURRENT .CSPROJ:
@@ -238,13 +258,21 @@ class DotNetMigrationAgent:
 {csproj_content}
 ```
 
+### CRITICAL RULES:
+1. Only use packages compatible with net10.0 target framework
+2. Check package versions - they must support net10.0
+3. Remove any packages that don't exist in modern .NET
+4. For .NET Framework APIs, rely on Microsoft.Windows.Compatibility package
+5. Never add packages with versions that only support .NET Framework (e.g., 4.x, 6.0 for ConfigurationManager)
+
 ### INSTRUCTIONS:
-1. Analyze the error and determine what packages are missing or misconfigured
-2. Add missing package references or fix existing ones
-3. Ensure all package versions are compatible with net10.0
-4. Output ONLY the complete, valid .csproj XML in a ```xml block
-5. Do NOT remove PropertyGroup settings or other project configuration
-6. No explanations, just the corrected XML file.
+1. Analyze the error message and identify which package is causing the problem
+2. Fix ONLY the problematic package(s) - update version to one compatible with net10.0
+3. If package doesn't exist or isn't available for net10.0, remove it
+4. Ensure TargetFramework is set to net10.0
+5. Output ONLY the complete, valid .csproj XML in a ```xml block
+6. Preserve all PropertyGroup settings
+7. No explanations, just the corrected XML.
 """
         return prompt
 

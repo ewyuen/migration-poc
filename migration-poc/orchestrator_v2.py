@@ -368,40 +368,25 @@ class OrchestratorV2:
                 all_modernized_code[filename] = modernized
                 state.artifacts[f"modernization_{filename}"] = modernized
 
-            # Copy .csproj to output directory with updated target framework
-            if os.path.exists(csproj_path):
+            # NOTE: Do NOT copy legacy .csproj - the modernizer generates its own clean one
+            # during the first modernize_code() call above. The legacy .csproj would have
+            # incompatible versions and unnecessary packages.
+            # Verify the modernizer generated a .csproj
+            output_csproj_path = os.path.join(output_src_dir, csproj_name)
+            if os.path.exists(output_csproj_path):
+                print(f"✅ Project file verified: {output_csproj_path}")
+                # Read and verify it has minimal, compatible packages
                 try:
-                    with open(csproj_path, "r", encoding="utf-8") as f:
+                    with open(output_csproj_path, "r", encoding="utf-8") as f:
                         csproj_content = f.read()
-                    # Update target framework
-                    csproj_content = re.sub(
-                        r"<TargetFramework>[^<]*</TargetFramework>",
-                        f"<TargetFramework>{self.config['global'].get('target_framework', 'net10.0')}</TargetFramework>",
-                        csproj_content
-                    )
-                    # Ensure Windows Compatibility Pack is included for .NET Framework migration
-                    if "Microsoft.Windows.Compatibility" not in csproj_content:
-                        # Add compatibility pack to ItemGroup or create one
-                        if "<ItemGroup>" in csproj_content:
-                            csproj_content = csproj_content.replace(
-                                "<ItemGroup>",
-                                '<ItemGroup>\n    <PackageReference Include="Microsoft.Windows.Compatibility" Version="10.0.0" />'
-                            )
-                        else:
-                            # Add ItemGroup if missing
-                            csproj_content = csproj_content.replace(
-                                "</Project>",
-                                '\n  <ItemGroup>\n    <PackageReference Include="Microsoft.Windows.Compatibility" Version="10.0.0" />\n  </ItemGroup>\n</Project>'
-                            )
-                        print(f"   ✓ Added Windows Compatibility Pack to .csproj")
-
-                    output_csproj_path = os.path.join(output_src_dir, csproj_name)
-                    Path(os.path.dirname(output_csproj_path)).mkdir(parents=True, exist_ok=True)
-                    with open(output_csproj_path, "w", encoding="utf-8") as f:
-                        f.write(csproj_content)
-                    print(f"✅ Project file updated: {output_csproj_path}")
+                    if "Microsoft.Windows.Compatibility" in csproj_content:
+                        print(f"   ✓ Includes Microsoft.Windows.Compatibility (net10.0 verified)")
+                    else:
+                        print(f"   ⚠️  WARNING: Windows Compatibility Pack not found in .csproj")
                 except Exception as e:
-                    print(f"⚠️  Failed to copy .csproj: {e}")
+                    print(f"   ⚠️  Could not verify .csproj: {e}")
+            else:
+                print(f"⚠️  .csproj not found at {output_csproj_path}")
 
             # Save modernized files with original names
             for filename, content in all_modernized_code.items():
