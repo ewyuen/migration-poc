@@ -336,7 +336,7 @@ bdd_generator:
   name: bdd_generator
   role: bdd_specification_generation
   description: Creates Gherkin feature files from extracted domain logic
-  entrypoint: migration-poc/agents/bdd_test_agent.py
+  entrypoint: migration-poc/agents/bdd_test_cases_generator.py
   
   tools:
     - scenario_generator            # Scenario creation

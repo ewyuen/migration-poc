@@ -91,7 +91,7 @@ migration_poc/
 │   │   ├── staging_agent.py  # NEW: Branch & copy management
 │   │   ├── modernizer.py
 │   │   ├── extractor.py
-│   │   ├── bdd_test_agent.py
+│   │   ├── bdd_test_cases_generator.py
 │   │   ├── test_writer.py    # NEW: Gherkin → xUnit conversion
 │   │   └── verifier.py
 │   ├── config.py             # Legacy configuration
@@ -650,7 +650,7 @@ To modify agent behavior, edit the corresponding file in `migration-poc/agents/`
 - `staging_agent.py` - Modify branch/copy behavior
 - `modernizer.py` - Update transformation rules
 - `extractor.py` - Change domain logic extraction
-- `bdd_test_agent.py` - Modify Gherkin generation
+- `bdd_test_cases_generator.py` - Modify Gherkin generation
 - `test_writer.py` - Customize test code generation
 - `verifier.py` - Update validation logic
 

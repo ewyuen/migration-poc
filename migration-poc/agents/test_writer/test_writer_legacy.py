@@ -350,7 +350,7 @@ def generate_bdd_tests(domain_logic: str, modernized_code: str, exploration: Dic
     while using the new TestWriter internally for xUnit code generation.
     """
     # For now, return the generated feature file content
-    # In a full implementation, this would use the actual Gherkin from bdd_test_agent.py
+    # In a full implementation, this would use the actual Gherkin from bdd_test_cases_generator.py
     return "# Generated Gherkin specifications would go here"
 
 

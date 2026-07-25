@@ -1,0 +1,393 @@
+# SpecKit Test Generation Guide
+
+## Overview
+
+SpecKit is the automated test generation system that converts Gherkin feature files into executable test code. It bridges the gap between business specifications (written in Gherkin) and automated tests in C#, Java, and Python.
+
+## Architecture
+
+### Components
+
+1. **Gherkin Processor** (`gherkin_processor.py`)
+   - Locates `.feature` files in migrated services
+   - Parses Gherkin syntax to extract features, scenarios, and steps
+   - Validates Gherkin files for correctness
+
+2. **Step Mapper** (`step_mapper.py`)
+   - Maintains registry of Gherkin step patterns
+   - Maps steps to test code actions
+   - Handles unmapped steps with placeholder generation
+   - Provides service API introspection
+
+3. **Test Code Generators** (`test_code_generator.py`)
+   - Generates language-specific test classes/functions
+   - C#: NUnit framework-based tests
+   - Java: JUnit 5 framework-based tests
+   - Python: pytest framework-based tests
+
+4. **Test Output Manager** (`test_output_manager.py`)
+   - Manages test output directory structure
+   - Ensures language-specific directory conventions
+   - Handles file naming and deduplication
+   - Generates file headers and imports
+
+5. **Test Generation Stage** (`test_generation_stage.py`)
+   - Orchestrator pipeline stage
+   - Coordinates all components
+   - Manages error handling and logging
+
+## Configuration
+
+### speckit_config.yaml
+
+Configure SpecKit behavior:
+
+```yaml
+speckit:
+  generators:
+    csharp:
+      framework: NUnit
+      file_extension: .cs
+      test_directory: Tests
+      
+    java:
+      framework: JUnit 5
+      file_extension: .java
+      test_directory: src/test/java
+      
+    python:
+      framework: pytest
+      file_extension: .py
+      test_directory: tests
+
+  step_patterns:
+    service_init:
+      patterns: [pattern1, pattern2, ...]
+      action: initialize_service
+      
+  error_handling:
+    fail_on_unmapped_steps: false
+    generate_placeholder_for_unmapped: true
+```
+
+## Usage
+
+### Basic Usage
+
+```python
+from agents.test_generation_stage import TestGenerationStage
+
+# Initialize stage
+stage = TestGenerationStage()
+
+# Execute test generation
+result = stage.execute("MyService")
+
+# Check results
+print(f"Generated {len(result['generated_tests'])} test files")
+if result['errors']:
+    print(f"Errors: {result['errors']}")
+```
+
+### Within Orchestrator
+
+```python
+# In orchestrator pipeline
+test_stage = TestGenerationStage(base_output_dir, config)
+result = test_stage.execute(component_name)
+
+if result['status'] == 'failed':
+    # Handle failure
+    pass
+```
+
+## Generated Test File Locations
+
+### C# Tests
+- Location: `migrated-output/{ComponentName}/Tests/`
+- File naming: `GeneratedScenarioNameTests.cs`
+- Example: `GeneratedUserAuthenticationTests.cs`
+
+### Java Tests
+- Location: `migrated-output/{ComponentName}/src/test/java/`
+- File naming: `GeneratedScenarioNameTests.java`
+- Example: `GeneratedUserAuthenticationTests.java`
+
+### Python Tests
+- Location: `migrated-output/{ComponentName}/tests/`
+- File naming: `test_generated_scenario_name.py`
+- Example: `test_generated_user_authentication.py`
+
+## Step Mapping
+
+### Built-in Step Patterns
+
+#### Service Initialization
+```gherkin
+Given a MyService service is running
+Given MyService service client is set up
+```
+
+#### API Calls
+```gherkin
+When I call GetUser on MyService
+When CreateUser is invoked with valid data
+```
+
+#### Assertions
+```gherkin
+Then the response should contain user ID
+Then username must be "John Doe"
+Then I receive a success response
+```
+
+### Extending Step Mappings
+
+Register custom step patterns:
+
+```python
+from agents.step_mapper import StepRegistry
+
+registry = StepRegistry()
+registry.register_mapping(
+    pattern=r"^When I (?:do|perform) (\w+)$",
+    action="perform_custom_action",
+    description="Custom action",
+    category="api_call"
+)
+```
+
+### Handling Unmapped Steps
+
+Steps that don't match any pattern are handled gracefully:
+
+1. **With `generate_placeholder_for_unmapped: true`** (default):
+   - Test code is generated with TODO comments
+   - Test marked as incomplete
+   - Includes descriptive message
+
+2. **With `fail_on_unmapped_steps: true`**:
+   - Unmapped steps cause generation to fail
+   - Error logged with step details
+
+Example placeholder:
+
+```csharp
+// TODO: Implement step: I perform some custom action
+Assert.Inconclusive("Unmapped step");
+```
+
+## Error Handling
+
+### Graceful Error Recovery
+
+The test generation stage continues on errors:
+
+- Malformed Gherkin files → logged, skipped
+- Unmapped steps → placeholder generated
+- API introspection failures → defaults used
+- Directory creation issues → reported, continues
+
+### Enabling Strict Mode
+
+```python
+stage = TestGenerationStage(
+    config={"fail_on_error": True}
+)
+```
+
+## Base Test Classes
+
+All generated tests inherit from language-specific base classes providing:
+
+- Service client initialization
+- Test context management
+- Common assertion helpers
+- Step parameter extraction
+
+### C# Base Class
+- `NUnitTestBase`
+- Location: Auto-generated in test class
+
+### Java Base Class
+- `JUnitTestBase`
+- Location: Auto-generated in test class
+
+### Python Base Class
+- `PytestTestBase`
+- Location: Auto-generated in test module
+
+## Configuration Options
+
+### Enable/Disable Test Generation
+
+```yaml
+# In orchestrator config
+test_generation:
+  enabled: true  # Set to false to skip test generation
+```
+
+### Language Support
+
+```yaml
+speckit:
+  generators:
+    csharp:
+      enabled: true
+    java:
+      enabled: true
+    python:
+      enabled: true
+```
+
+### Output Options
+
+```yaml
+speckit:
+  output:
+    preserve_gherkin_structure: true
+    generate_step_implementations: true
+    include_async_support: true
+```
+
+## Logging
+
+### Log Levels
+
+```python
+import logging
+
+logger = logging.getLogger('test_generation')
+logger.setLevel(logging.INFO)  # INFO, DEBUG, WARNING, ERROR
+```
+
+### Log File
+
+Logs written to: `speckit_generation.log`
+
+Sample log output:
+```
+2026-07-24 10:15:23 - test_generation - INFO - Processing /path/to/scenarios.feature
+2026-07-24 10:15:23 - test_generation - DEBUG - Matched step: 'Given a MyService service is running' -> initialize_service
+2026-07-24 10:15:23 - test_generation - INFO - Generated test file: /path/to/Tests/GeneratedTests.cs
+```
+
+## Best Practices
+
+### Writing Gherkin Files
+
+1. **Clear, Testable Steps**
+   ```gherkin
+   ✓ When I call GetUser with ID "123"
+   ✗ When something happens
+   ```
+
+2. **Consistent Language**
+   ```gherkin
+   ✓ Given service is initialized
+   ✓ When I call an API
+   ✗ When I invoke something
+   ```
+
+3. **Avoid Implementation Details**
+   ```gherkin
+   ✓ Then the user is found
+   ✗ Then the query returns 1 row
+   ```
+
+### Debugging Generated Tests
+
+1. Check generated file location (see Generated Test File Locations)
+2. Review step mapping (check if pattern matches)
+3. Check logs (`speckit_generation.log`)
+4. Run generated tests with verbose logging enabled
+
+## Troubleshooting
+
+### No Test Files Generated
+
+**Symptom**: Gherkin files exist but no tests generated
+
+**Solutions**:
+1. Verify Gherkin files exist in expected location
+2. Check file naming (should be `*.feature`)
+3. Validate Gherkin syntax (use `GherkinValidator`)
+4. Check logs for validation errors
+
+### Unmapped Steps
+
+**Symptom**: Generated tests have TODO placeholders
+
+**Solutions**:
+1. Add step pattern to `speckit_config.yaml`
+2. Register pattern programmatically via `StepRegistry`
+3. Update step text to match existing patterns
+
+### File Encoding Issues
+
+**Symptom**: Generated files have encoding problems
+
+**Solutions**:
+1. Ensure Gherkin files are UTF-8 encoded
+2. Verify `test_output_manager.py` uses UTF-8
+
+## Performance
+
+### Large Feature Files
+
+For files with many scenarios:
+- Processing time: ~10-50ms per scenario
+- Memory usage: Minimal (streaming parser)
+- Output: One test file per feature file
+
+### Batch Processing
+
+```python
+locator = GherkinFileLocator()
+all_features = locator.find_all_feature_files()
+
+for component, files in all_features.items():
+    result = stage.execute(component)
+```
+
+## Integration with Orchestrator
+
+The test generation stage is integrated after code modernization:
+
+```
+1. Exploration
+2. Extraction
+3. Modernization
+4. [Test Generation] ← Your new stage
+5. Verification
+6. Output
+```
+
+Add to orchestrator pipeline:
+
+```python
+from agents.test_generation_stage import TestGenerationStage
+
+# In orchestrator init
+self.test_generation_stage = TestGenerationStage()
+
+# In orchestrator run
+result = self.test_generation_stage.execute(component_name)
+```
+
+## Support
+
+For issues or questions:
+1. Check logs in `speckit_generation.log`
+2. Review this guide (especially Troubleshooting)
+3. Check generated test syntax for language-specific issues
+4. Verify Gherkin file structure with `GherkinValidator`
+
+## Future Enhancements
+
+Potential improvements:
+- Machine learning-based step mapping
+- Support for more languages (Go, Rust, Node.js)
+- Test data factory generation
+- Performance benchmarking
+- Coverage analysis

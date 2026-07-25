@@ -2,8 +2,9 @@
 from .explorer import explore_code
 from .extractor import extract_domain_logic
 from .modernizer import modernize_code
-from .bdd_test_agent import generate_bdd_tests
+from .bdd_test_cases_generator import generate_bdd_tests
 from .verifier import verify_modernization
+from .test_writer_stage import TestWriterStage
 
 __all__ = [
     "explore_code",
@@ -11,4 +12,5 @@ __all__ = [
     "modernize_code",
     "generate_bdd_tests",
     "verify_modernization",
+    "TestWriterStage",
 ]

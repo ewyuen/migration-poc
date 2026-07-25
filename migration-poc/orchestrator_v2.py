@@ -13,8 +13,9 @@ from agents.staging_agent import StagingAgent
 from agents.explorer import explore_code
 from agents.extractor import extract_domain_logic
 from agents.modernizer import modernize_code
-from agents.bdd_test_agent import generate_bdd_tests
+from agents.bdd_test_cases_generator import generate_bdd_tests
 from agents.test_writer import TestWriter
+from agents.test_writer_stage import TestWriterStage
 from config import OUTPUT_DIR, TARGET_FRAMEWORK, COMPLIANCE_CONTEXT, DOMAIN
 
 
@@ -76,6 +77,7 @@ class OrchestratorV2:
         self.input_handler = InputHandler()
         self.staging_agent = StagingAgent()
         self.test_writer = TestWriter()
+        self.test_writer_stage = TestWriterStage(config=self.config.get("test_writer"))
         self.audit_dir = self.config.get("global", {}).get("audit_dir", "migration-poc/audit")
         Path(self.audit_dir).mkdir(parents=True, exist_ok=True)
 
@@ -162,7 +164,7 @@ class OrchestratorV2:
 
         # Try to identify namespace blocks and classes
         namespace_pattern = r'namespace\s+[\w.]+\s*\{(.*?)(?=namespace|\Z)'
-        class_pattern = r'(public\s+(?:class|interface|record|struct)\s+\w+.*?(?=\n\s*(?:public\s+(?:class|interface|record|struct)|namespace|\Z)))'
+        class_pattern = r'(public\s+(?:class|interface|record|struct)\s+\w+.*?(?=\n\s*(?:public\s+(?:class|interface|record|struct)|namespace|\}\s*\Z|\Z)))'
 
         namespaces = list(re.finditer(namespace_pattern, clean_code, re.DOTALL))
 
@@ -324,6 +326,18 @@ class OrchestratorV2:
 
         if success:
             self._save_output(request.component_name, f"{request.component_name}.Tests.cs", test_code)
+            # Run TestWriterStage to implement the skeleton test methods with real code
+            print("🖋️ Running TestWriterStage to implement skeletons...")
+            writer_stage_result = self.test_writer_stage.execute(request.component_name)
+            if writer_stage_result["status"] == "success":
+                print("✅ TestWriterStage successfully completed and filled all skeletons!")
+                # Read the updated test code to save it in workflow state artifacts
+                test_file_path = os.path.join("migrated-output", request.component_name, f"{request.component_name}.Tests.cs")
+                if os.path.exists(test_file_path):
+                    with open(test_file_path, "r", encoding="utf-8") as f:
+                        test_code = f.read()
+            else:
+                print(f"⚠️ TestWriterStage completed with issues/errors: {writer_stage_result.get('errors', [])}")
 
         state.artifacts["bdd"] = bdd_tests
         state.artifacts["test_code"] = test_code if success else ""
