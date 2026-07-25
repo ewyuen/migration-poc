@@ -1,7 +1,7 @@
 """Test Writer Pipeline Stage: Orchestrator integration for filling C# test skeletons"""
 import logging
 import os
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 from agents.test_writer.test_writer_agent import TestWriterAgent
 
 
@@ -29,12 +29,13 @@ class TestWriterStage:
         self.filled_tests = []
         self.errors = []
 
-    def execute(self, component_name: str) -> Dict:
+    def execute(self, component_name: str, feedback_errors: Optional[List[str]] = None) -> Dict:
         """
         Execute test writing (filling skeletons) for a component.
 
         Args:
             component_name: Name of the migrated service
+            feedback_errors: List of compiler build errors if correcting compilation issues
 
         Returns:
             Result dictionary with status and filled files
@@ -75,20 +76,27 @@ class TestWriterStage:
 
             # Fill each skeleton test file
             for test_file in test_files:
-                self.logger.info(f"Writing implementations for skeleton test file: {test_file}")
-                
-                success, error, code = self.agent.write_tests(
-                    skeleton_file_path=test_file,
-                    service_dir_path=service_dir,
-                    output_file_path=test_file
-                )
+                if feedback_errors:
+                    self.logger.info(f"Healing test file due to compile errors: {test_file}")
+                    success, error, code = self.agent.heal_tests(
+                        test_file_path=test_file,
+                        service_dir_path=service_dir,
+                        errors=feedback_errors
+                    )
+                else:
+                    self.logger.info(f"Writing implementations for skeleton test file: {test_file}")
+                    success, error, code = self.agent.write_tests(
+                        skeleton_file_path=test_file,
+                        service_dir_path=service_dir,
+                        output_file_path=test_file
+                    )
                 
                 if success:
-                    self.logger.info(f"Successfully implemented test file: {test_file}")
+                    self.logger.info(f"Successfully processed test file: {test_file}")
                     result["filled_tests"].append(test_file)
                     self.filled_tests.append(test_file)
                 else:
-                    self.logger.error(f"Failed to implement test file {test_file}: {error}")
+                    self.logger.error(f"Failed to process test file {test_file}: {error}")
                     result["errors"].append(f"{test_file}: {error}")
                     self.errors.append(f"{test_file}: {error}")
 

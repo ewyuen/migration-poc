@@ -3,7 +3,6 @@ import os
 import json
 import yaml
 import sys
-import re
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -12,11 +11,14 @@ from typing import Dict, Optional, Tuple
 from input_handler import InputHandler, MigrationRequest
 from agents.staging_agent import StagingAgent
 from agents.explorer import explore_code
+from agents.extractor import extract_domain_logic
 from agents.modernizer import modernize_code
+from agents.modernization_orchestrator import ModernizationOrchestrator
 from agents.bdd_test_cases_generator import generate_bdd_tests
 from agents.test_writer import TestWriter
 from agents.test_writer_stage import TestWriterStage
-from agents.verifier import run_tests_and_collect_coverage
+from agents.test_orchestrator import TestOrchestrator
+from agents.verifier import verify_test_results
 from config import OUTPUT_DIR, TARGET_FRAMEWORK, COMPLIANCE_CONTEXT, DOMAIN
 
 
@@ -36,7 +38,7 @@ class WorkflowState:
         """Move to next stage"""
         self.current_stage = stage_name
         print(f"\n{'='*70}")
-        print(f"[STAGE {len(self.completed_stages) + 1}/6] {stage_name.upper()}")
+        print(f"[STAGE {len(self.completed_stages) + 1}/7] {stage_name.upper()}")
         print(f"{'='*70}\n")
 
     def mark_stage_complete(self) -> None:
@@ -77,8 +79,10 @@ class OrchestratorV2:
         self.config = self._load_config()
         self.input_handler = InputHandler()
         self.staging_agent = StagingAgent()
+        self.modernization_orchestrator = ModernizationOrchestrator(config=self.config.get("modernization"))
         self.test_writer = TestWriter()
         self.test_writer_stage = TestWriterStage(config=self.config.get("test_writer"))
+        self.test_orchestrator = TestOrchestrator(config=self.config.get("test_writer"))
         self.audit_dir = self.config.get("global", {}).get("audit_dir", "migration-poc/audit")
         Path(self.audit_dir).mkdir(parents=True, exist_ok=True)
 
@@ -139,43 +143,15 @@ class OrchestratorV2:
         return None
 
     def _read_component_files(self, component_path: str) -> Dict[str, str]:
-        """
-        Read ONLY .cs source files (no other file types).
-        Excludes: obj/, bin/, .vs/, packages/, and generated files.
-        """
+        """Read all .cs files from component directory with their names"""
         files_content = {}
         try:
-            # Exclude generated directories and files
-            excluded_dirs = {"obj", "bin", ".vs", "packages"}
-            excluded_patterns = {
-                "AssemblyAttributes",
-                "AssemblyInfo",
-                ".AssemblyAttributes.",
-                "TemporaryGeneratedFile"
-            }
-
             for root, dirs, files in os.walk(component_path):
-                # Skip excluded directories
-                dirs[:] = [d for d in dirs if d not in excluded_dirs]
-
-                # Only process files in root or first level (actual source files)
-                # Skip nested directories from obj/, bin/, etc.
-                if any(exc in root for exc in excluded_dirs):
-                    continue
-
                 for file in files:
-                    # Skip generated files
                     if file.endswith(".cs"):
-                        # Exclude generated/framework files
-                        if any(pattern in file for pattern in excluded_patterns):
-                            print(f"⊘ Skipping generated file: {file}")
-                            continue
-
                         filepath = os.path.join(root, file)
                         with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
                             files_content[file] = f.read()
-                            print(f"✓ Reading source file: {file}")
-
         except Exception as e:
             print(f"⚠️  Error reading component files: {e}")
         return files_content
@@ -244,7 +220,7 @@ class OrchestratorV2:
         if is_log_file:
             output_dir = os.path.join("migrated-output", "result-log")
         else:
-            output_dir = os.path.join("migrated-output", component_name, "src")
+            output_dir = os.path.join("migrated-output", component_name)
 
         Path(output_dir).mkdir(parents=True, exist_ok=True)
 
@@ -312,113 +288,75 @@ class OrchestratorV2:
         state.artifacts["exploration"] = exploration_results
         state.mark_stage_complete()
 
-        # STAGE 4: MODERNIZATION (with self-healing compilation verification)
-        state.advance_stage("modernization")
+        # STAGE 4: EXTRACTION
+        state.advance_stage("extraction")
         legacy_code_path = os.path.join("legacy-code", request.component_name)
-        output_src_dir = os.path.join("migrated-output", request.component_name, "src")
-        failure_log_dir = os.path.join("migrated-output", "result-log")
 
-        # IMPORTANT: Only process .cs and .csproj files
-        # Read .cs source files only (exclude obj/, bin/, generated files)
+        # Read all .cs files from the component directory
         component_files = self._read_component_files(legacy_code_path)
         if not component_files:
             state.mark_stage_failed(f"No .cs files found in {legacy_code_path}")
             self._log_workflow(state)
             return state.to_dict()
 
-        # Find .csproj file in legacy code (exactly one per component)
-        csproj_path = None
-        csproj_name = None
-        for root, dirs, files in os.walk(legacy_code_path):
-            for file in files:
-                # Only process .csproj files
-                if file.endswith(".csproj"):
-                    csproj_path = os.path.join(root, file)
-                    csproj_name = file
-                    break
-            if csproj_path:
-                break
+        # Combine all file contents for analysis
+        combined_legacy_code = "\n".join(component_files.values())
 
-        if not csproj_path:
-            # Fallback if no .csproj found
-            csproj_name = f"{request.component_name}.csproj"
-            csproj_path = os.path.join(legacy_code_path, csproj_name)
+        extraction = extract_domain_logic(combined_legacy_code, exploration_results)
+        self._save_output(request.component_name, "extracted_logic.md", extraction)
+        state.artifacts["extraction"] = extraction
+        state.mark_stage_complete()
 
-        # Extract assembly and namespace info from .csproj (simplified)
-        assembly_name = request.component_name
-        root_namespace = request.component_name
+        # STAGE 5: MODERNIZATION WITH SELF-HEALING COMPILATION VERIFICATION
+        state.advance_stage("modernization")
+        print("🔄 Running self-healing Modernization Orchestrator loop...")
+        modernization_report = self.modernization_orchestrator.execute(
+            request.component_name,
+            modernize_code,
+            combined_legacy_code,
+            extraction,
+            exploration_results
+        )
 
-        try:
-            # Use self-healing agent for each .cs file
-            print(f"🔄 Modernizing {len(component_files)} file(s) with compilation verification...")
-            print(f"   Output directory: {output_src_dir}")
-            print(f"   .csproj: {csproj_name}")
-            all_modernized_code = {}
+        if not modernization_report["compiled"]:
+            # Modernization failed - skip test generation and go to verifier
+            print(f"❌ Modernization failed after {modernization_report['attempts']} attempts")
+            state.mark_stage_failed(f"Modernization failed: code would not compile after {modernization_report['attempts']} attempts")
+            state.artifacts["modernization"] = modernization_report
 
-            for filename, legacy_code in component_files.items():
-                print(f"\n📝 Processing: {filename}")
-                print(f"   Code size: {len(legacy_code)} bytes")
-                try:
-                    modernized = modernize_code(
-                        legacy_code=legacy_code,
-                        domain_logic=exploration_results.get("domain_logic", ""),
-                        exploration=exploration_results,
-                        output_dir=output_src_dir,
-                        csproj_name=csproj_name,
-                        output_filename=filename,
-                        target_framework=self.config["global"].get("target_framework", "net10.0"),
-                        failure_log_dir=failure_log_dir
-                    )
-                    all_modernized_code[filename] = modernized
-                    state.artifacts[f"modernization_{filename}"] = modernized
-                    print(f"   ✅ {filename} modernized ({len(modernized)} bytes)")
-                except Exception as file_error:
-                    print(f"\n   ❌ ERROR processing {filename}:")
-                    print(f"      {type(file_error).__name__}: {str(file_error)}")
-                    import traceback
-                    traceback.print_exc()
-                    raise
+            # Run verifier to report failure
+            state.advance_stage("verification")
+            try:
+                verification_results = verify_test_results(request.component_name, {
+                    "compiled": False,
+                    "errors": [f"Modernization failed: {e['message']}" for e in modernization_report.get("errors", [])],
+                    "tests_dir": os.path.join("migrated-output", request.component_name, "tests"),
+                    "commented_tests": [],
+                    "modernization_failed": True,
+                    "modernization_errors": modernization_report.get("errors", [])
+                })
+                state.artifacts["verification"] = verification_results
+            except Exception as e:
+                state.mark_stage_failed(f"Error reporting modernization failure: {str(e)}")
 
-            # NOTE: Do NOT copy legacy .csproj - the modernizer generates its own clean one
-            # during the first modernize_code() call above. The legacy .csproj would have
-            # incompatible versions and unnecessary packages.
-            # Verify the modernizer generated a .csproj
-            output_csproj_path = os.path.join(output_src_dir, csproj_name)
-            if os.path.exists(output_csproj_path):
-                print(f"✅ Project file verified: {output_csproj_path}")
-                # Read and verify it has minimal, compatible packages
-                try:
-                    with open(output_csproj_path, "r", encoding="utf-8") as f:
-                        csproj_content = f.read()
-                    if "Microsoft.Windows.Compatibility" in csproj_content:
-                        print(f"   ✓ Includes Microsoft.Windows.Compatibility (net10.0 verified)")
-                    else:
-                        print(f"   ⚠️  WARNING: Windows Compatibility Pack not found in .csproj")
-                except Exception as e:
-                    print(f"   ⚠️  Could not verify .csproj: {e}")
-            else:
-                print(f"⚠️  .csproj not found at {output_csproj_path}")
-
-            # Save modernized files with original names
-            for filename, content in all_modernized_code.items():
-                self._save_output(request.component_name, filename, content)
-
-            state.artifacts["modernization"] = all_modernized_code
-            state.mark_stage_complete()
-
-        except Exception as e:
-            error_msg = f"Modernization failed: {str(e)}"
-            state.mark_stage_failed(error_msg)
             self._log_workflow(state)
-            print(f"\n❌ MODERNIZATION FAILED")
-            print(f"   Error: {error_msg}")
-            import traceback
-            traceback.print_exc()
+            self._print_summary(state)
             return state.to_dict()
 
-        # STAGE 5: BDD & TEST WRITING
+        # Modernization succeeded - extract and save modernized code
+        modernized_code = modernization_report["modernized_code"]
+        state.artifacts["modernization"] = modernized_code
+
+        modernized_files = self._parse_modernized_files(modernized_code, component_files.keys())
+        for filename, content in modernized_files.items():
+            self._save_output(request.component_name, filename, content)
+
+        # Note: csproj is already generated by ModernizationOrchestrator with all files
+        state.mark_stage_complete()
+
+        # STAGE 6: BDD & TEST WRITING
         state.advance_stage("bdd_and_testing")
-        bdd_tests = generate_bdd_tests(exploration_results, modernized_code, exploration_results)
+        bdd_tests = generate_bdd_tests(extraction, modernized_code, exploration_results)
         self._save_output(request.component_name, os.path.join("tests", "scenarios.feature"), bdd_tests)
 
         # Generate executable tests from Gherkin (NEW)
@@ -428,29 +366,28 @@ class OrchestratorV2:
             self._save_output(request.component_name, os.path.join("tests", f"{request.component_name}.Tests.cs"), "")
         )
 
+        runner_report = {}
         if success:
             self._save_output(request.component_name, os.path.join("tests", f"{request.component_name}.Tests.cs"), test_code)
-            # Run TestWriterStage to implement the skeleton test methods with real code
-            print("🖋️ Running TestWriterStage to implement skeletons...")
-            writer_stage_result = self.test_writer_stage.execute(request.component_name)
-            if writer_stage_result["status"] == "success":
-                print("✅ TestWriterStage successfully completed and filled all skeletons!")
-                # Read the updated test code to save it in workflow state artifacts
-                test_file_path = os.path.join("migrated-output", request.component_name, "tests", f"{request.component_name}.Tests.cs")
-                if os.path.exists(test_file_path):
-                    with open(test_file_path, "r", encoding="utf-8") as f:
-                        test_code = f.read()
-            else:
-                print(f"⚠️ TestWriterStage completed with issues/errors: {writer_stage_result.get('errors', [])}")
+            # Run self-healing Test Orchestrator loop
+            print("🖋️ Running self-healing Test Orchestrator loop...")
+            runner_report = self.test_orchestrator.execute(request.component_name)
+            
+            # Read the final test code to save it in workflow state artifacts
+            test_file_path = os.path.join("migrated-output", request.component_name, "tests", f"{request.component_name}.Tests.cs")
+            if os.path.exists(test_file_path):
+                with open(test_file_path, "r", encoding="utf-8") as f:
+                    test_code = f.read()
 
         state.artifacts["bdd"] = bdd_tests
         state.artifacts["test_code"] = test_code if success else ""
+        state.artifacts["runner_report"] = runner_report
         state.mark_stage_complete()
 
-        # STAGE 6: VERIFICATION (Compilation, Test Execution & Coverage)
+        # STAGE 7: VERIFICATION (Compilation, Test Execution & Coverage)
         state.advance_stage("verification")
         try:
-            verification_results = run_tests_and_collect_coverage(request.component_name)
+            verification_results = verify_test_results(request.component_name, runner_report)
             state.artifacts["verification"] = verification_results
             if verification_results.get("status") == "PASS":
                 state.mark_stage_complete()
@@ -527,7 +464,7 @@ class OrchestratorV2:
         print("="*70)
         print(f"\nComponent: {state.request.component_name}")
         print(f"Status: {state.to_dict().get('status', 'unknown')}")
-        print(f"Completed Stages: {len(state.completed_stages)}/6")
+        print(f"Completed Stages: {len(state.completed_stages)}/7")
         print(f"Total Time: {state.to_dict().get('timestamp_end', 'Unknown')}")
 
         verification = state.artifacts.get("verification", {})
@@ -546,7 +483,7 @@ class OrchestratorV2:
                 for fail in verification.get("failures", [])[:3]:
                     print(f"    - {fail['test_name']}: {fail['message']}")
 
-        print(f"\n📁 Source files saved to: migrated-output/{state.request.component_name}/src/")
+        print(f"\n📁 Source files saved to: migrated-output/{state.request.component_name}/")
         print(f"📁 Logs and reports saved to: migrated-output/result-log/")
         print("="*70 + "\n")
 
