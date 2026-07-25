@@ -16,6 +16,7 @@ from agents.modernizer import modernize_code
 from agents.bdd_test_cases_generator import generate_bdd_tests
 from agents.test_writer import TestWriter
 from agents.test_writer_stage import TestWriterStage
+from agents.verifier import run_tests_and_collect_coverage
 from config import OUTPUT_DIR, TARGET_FRAMEWORK, COMPLIANCE_CONTEXT, DOMAIN
 
 
@@ -224,6 +225,8 @@ class OrchestratorV2:
             content = self._strip_markdown_code_block(content)
 
         filepath = os.path.join(output_dir, filename)
+        # Ensure parent directories exist
+        Path(os.path.dirname(filepath)).mkdir(parents=True, exist_ok=True)
         with open(filepath, "w", encoding="utf-8") as f:
             f.write(content)
 
@@ -315,24 +318,24 @@ class OrchestratorV2:
         # STAGE 6: BDD & TEST WRITING
         state.advance_stage("bdd_and_testing")
         bdd_tests = generate_bdd_tests(extraction, modernized_code, exploration_results)
-        self._save_output(request.component_name, "scenarios.feature", bdd_tests)
+        self._save_output(request.component_name, os.path.join("tests", "scenarios.feature"), bdd_tests)
 
         # Generate executable tests from Gherkin (NEW)
         success, error, test_code = self.test_writer.write_tests_from_gherkin(
             bdd_tests,
             request.component_name,
-            self._save_output(request.component_name, f"{request.component_name}.Tests.cs", "")
+            self._save_output(request.component_name, os.path.join("tests", f"{request.component_name}.Tests.cs"), "")
         )
 
         if success:
-            self._save_output(request.component_name, f"{request.component_name}.Tests.cs", test_code)
+            self._save_output(request.component_name, os.path.join("tests", f"{request.component_name}.Tests.cs"), test_code)
             # Run TestWriterStage to implement the skeleton test methods with real code
             print("🖋️ Running TestWriterStage to implement skeletons...")
             writer_stage_result = self.test_writer_stage.execute(request.component_name)
             if writer_stage_result["status"] == "success":
                 print("✅ TestWriterStage successfully completed and filled all skeletons!")
                 # Read the updated test code to save it in workflow state artifacts
-                test_file_path = os.path.join("migrated-output", request.component_name, f"{request.component_name}.Tests.cs")
+                test_file_path = os.path.join("migrated-output", request.component_name, "tests", f"{request.component_name}.Tests.cs")
                 if os.path.exists(test_file_path):
                     with open(test_file_path, "r", encoding="utf-8") as f:
                         test_code = f.read()
@@ -343,7 +346,19 @@ class OrchestratorV2:
         state.artifacts["test_code"] = test_code if success else ""
         state.mark_stage_complete()
 
-        # Summary (Verification stage skipped for now)
+        # STAGE 7: VERIFICATION (Compilation, Test Execution & Coverage)
+        state.advance_stage("verification")
+        try:
+            verification_results = run_tests_and_collect_coverage(request.component_name)
+            state.artifacts["verification"] = verification_results
+            if verification_results.get("status") == "PASS":
+                state.mark_stage_complete()
+            else:
+                # Document fail state, but do not crash orchestrator process
+                state.mark_stage_failed(f"Test verification failed. Status: {verification_results.get('status')}")
+        except Exception as e:
+            state.mark_stage_failed(f"Error executing verification stage: {str(e)}")
+
         self._log_workflow(state)
         self._print_summary(state)
 
@@ -411,8 +426,24 @@ class OrchestratorV2:
         print("="*70)
         print(f"\nComponent: {state.request.component_name}")
         print(f"Status: {state.to_dict().get('status', 'unknown')}")
-        print(f"Completed Stages: {len(state.completed_stages)}/6")
+        print(f"Completed Stages: {len(state.completed_stages)}/7")
         print(f"Total Time: {state.to_dict().get('timestamp_end', 'Unknown')}")
+
+        verification = state.artifacts.get("verification", {})
+        if verification:
+            print("\n🔬 Verification Details:")
+            print(f"  Test Status: {verification.get('status', 'N/A')}")
+            print(f"  Passed Tests: {verification.get('passed_tests', 0)} / {verification.get('total_tests', 0)}")
+            print(f"  Line Coverage: {verification.get('line_coverage', 0.0):.2f}%")
+            print(f"  Branch Coverage: {verification.get('branch_coverage', 0.0):.2f}%")
+            if not verification.get("compiled") and verification.get("errors"):
+                print("  Compilation Errors:")
+                for err in verification.get("errors", [])[:5]:
+                    print(f"    - {err}")
+            elif verification.get("failed_tests", 0) > 0 and verification.get("failures"):
+                print("  Failed Tests:")
+                for fail in verification.get("failures", [])[:3]:
+                    print(f"    - {fail['test_name']}: {fail['message']}")
 
         print(f"\n📁 Source files saved to: migrated-output/{state.request.component_name}/")
         print(f"📁 Logs and reports saved to: migrated-output/result-log/")
