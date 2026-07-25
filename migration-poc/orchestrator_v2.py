@@ -215,7 +215,7 @@ class OrchestratorV2:
         if is_log_file:
             output_dir = os.path.join("migrated-output", "result-log")
         else:
-            output_dir = os.path.join("migrated-output", component_name)
+            output_dir = os.path.join("migrated-output", component_name, "src")
 
         Path(output_dir).mkdir(parents=True, exist_ok=True)
 
@@ -437,7 +437,7 @@ class OrchestratorV2:
                 for fail in verification.get("failures", [])[:3]:
                     print(f"    - {fail['test_name']}: {fail['message']}")
 
-        print(f"\n📁 Source files saved to: migrated-output/{state.request.component_name}/")
+        print(f"\n📁 Source files saved to: migrated-output/{state.request.component_name}/src/")
         print(f"📁 Logs and reports saved to: migrated-output/result-log/")
         print("="*70 + "\n")
 
