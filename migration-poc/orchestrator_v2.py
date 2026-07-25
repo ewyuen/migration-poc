@@ -13,7 +13,7 @@ from agents.staging_agent import StagingAgent
 from agents.explorer import explore_code
 from agents.extractor import extract_domain_logic
 from agents.modernizer import modernize_code
-from agents.bdd_test_agent import generate_bdd_tests
+from agents.bdd_test_cases_generator import generate_bdd_tests
 from agents.test_writer import TestWriter
 from config import OUTPUT_DIR, TARGET_FRAMEWORK, COMPLIANCE_CONTEXT, DOMAIN
 

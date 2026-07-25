@@ -34,7 +34,7 @@
 - [ ] 1.5.6 Save modernized code to `output/3_modernized_code.cs`
 
 ### 1.6 BDD Test Agent
-- [ ] 1.6.1 Implement `agents/bdd_test_agent.py` to generate Gherkin scenarios
+- [ ] 1.6.1 Implement `agents/bdd_test_cases_generator.py` to generate Gherkin scenarios
 - [ ] 1.6.2 Test BDD Agent with domain logic and modernized code
 - [ ] 1.6.3 Verify output: Gherkin feature file with valid syntax
 - [ ] 1.6.4 Confirm coverage: happy path, validation failures, edge cases, compliance scenarios

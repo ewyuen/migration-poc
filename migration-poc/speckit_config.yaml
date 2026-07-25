@@ -1,0 +1,79 @@
+speckit:
+  # SpecKit test generation configuration
+
+  generators:
+    csharp:
+      name: C# NUnit Generator
+      framework: NUnit
+      file_extension: .cs
+      test_directory: Tests
+      test_class_suffix: Tests
+      base_class: NUnitTestBase
+      imports:
+        - NUnit.Framework
+        - System
+        - System.Threading.Tasks
+
+    java:
+      name: Java JUnit Generator
+      framework: JUnit 5
+      file_extension: .java
+      test_directory: src/test/java
+      test_class_suffix: Tests
+      base_class: JUnitTestBase
+      imports:
+        - org.junit.jupiter.api.Test
+        - org.junit.jupiter.api.BeforeEach
+        - org.junit.jupiter.api.DisplayName
+        - static org.junit.jupiter.api.Assertions.*
+
+    python:
+      name: Python pytest Generator
+      framework: pytest
+      file_extension: .py
+      test_directory: tests
+      test_file_prefix: test_
+      base_class: PytestTestBase
+      imports:
+        - pytest
+        - requests
+
+  # Step mapping configuration
+  step_patterns:
+    service_init:
+      patterns:
+        - "^(?:Given|When|Then) (?:a|the) (\\w+) service is (?:running|initialized)$"
+        - "^(?:Given|When|Then) (\\w+) service client is set up$"
+      action: initialize_service
+
+    api_call:
+      patterns:
+        - "^(?:When) I (?:call|invoke|execute) (\\w+) on (.+)$"
+        - "^(?:When) (\\w+) (?:is called|is invoked) (?:with|on) (.+)$"
+      action: call_api
+
+    assertion:
+      patterns:
+        - "^(?:Then) the response (?:should|must) contain (.+)$"
+        - "^(?:Then) (.+) (?:should|must) be (.+)$"
+        - "^(?:Then) (?:I|the system) (?:receive|get|obtain) (.+)$"
+      action: validate_assertion
+
+  # Output configuration
+  output:
+    preserve_gherkin_structure: true
+    generate_step_implementations: true
+    generate_test_data_builders: false
+    include_async_support: true
+
+  # Error handling
+  error_handling:
+    fail_on_unmapped_steps: false
+    generate_placeholder_for_unmapped: true
+    log_unmapped_steps: true
+
+  # Logging
+  logging:
+    level: INFO
+    output_format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    log_file: "speckit_generation.log"
