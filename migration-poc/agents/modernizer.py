@@ -66,23 +66,66 @@ class DotNetMigrationAgent:
             f.write(csproj_content)
         print(f"📦 Generated: {self.csproj_path}")
 
-    def run_dotnet_build(self) -> tuple[bool, List[CompilerError]]:
-        """Execute dotnet build and parse compiler errors"""
-        cmd = ["dotnet", "build", self.csproj_path, "-c", "Debug"]
+    def run_dotnet_restore(self) -> bool:
+        """Restore NuGet packages before building"""
+        cmd = ["dotnet", "restore", self.csproj_path]
+        print(f"   📦 Restoring NuGet packages...")
         try:
             result = subprocess.run(
                 cmd,
                 cwd=self.output_dir,
                 capture_output=True,
                 text=True,
-                timeout=30
+                timeout=60
+            )
+            if result.returncode == 0:
+                print(f"   ✓ Packages restored")
+                return True
+            else:
+                print(f"   ❌ Restore failed:")
+                print(f"      {result.stderr[:300]}")
+                return False
+        except subprocess.TimeoutExpired:
+            print(f"   ❌ Restore timeout (60s)")
+            return False
+        except Exception as e:
+            print(f"   ❌ Restore error: {e}")
+            return False
+
+    def run_dotnet_build(self) -> tuple[bool, List[CompilerError]]:
+        """Restore packages, then execute dotnet build and parse compiler errors"""
+        # First: restore packages
+        restore_ok = self.run_dotnet_restore()
+
+        # Then: build
+        cmd = ["dotnet", "build", self.csproj_path, "-c", "Debug"]
+        print(f"   🔨 Building...")
+        try:
+            result = subprocess.run(
+                cmd,
+                cwd=self.output_dir,
+                capture_output=True,
+                text=True,
+                timeout=60
             )
             if result.returncode == 0:
                 return True, []
+
+            # Parse errors
             errors = self._parse_compiler_errors(result.stdout + result.stderr)
+
+            # Show raw output if no errors parsed (helps debug)
+            if not errors and result.stderr:
+                print(f"   ⚠️  Build failed but no CS errors parsed. Raw output:")
+                print(f"      {result.stderr[:500]}")
+
             return False, errors
         except subprocess.TimeoutExpired:
-            return False, [CompilerError("", 0, 0, "TIMEOUT", "Build timeout after 30s")]
+            print(f"   ❌ Build timeout (60s)")
+            return False, [CompilerError("", 0, 0, "TIMEOUT", "Build timeout after 60s")]
+        except Exception as e:
+            print(f"   ❌ Build error: {e}")
+            return False, [CompilerError("", 0, 0, "ERROR", str(e))]
 
     def _parse_compiler_errors(self, build_output: str) -> List[CompilerError]:
         """Parse MSBuild error lines: path(line,col): error CSxxxx: message"""
@@ -204,11 +247,24 @@ Output ONLY the modernized C# code in a ```csharp block."""
                 f.write(current_code)
             print(f"   → Attempt {attempt} code updated. Retrying...")
 
-        # Max retries exceeded
+        # Max retries exceeded - preserve files and log errors
         print(f"\n❌ Migration failed after {self.max_retries} attempts.")
+        print(f"📁 Output files preserved in: {self.output_dir}")
+        print(f"📝 Latest code in: {output_filepath}")
+
         if failure_log_dir:
             self._log_failure(output_filename, errors, failure_log_dir)
-        raise RuntimeError(f"Migration failed for {output_filename} after {self.max_retries} retries")
+            print(f"📋 Error log saved")
+
+        # Show final errors for debugging
+        if errors:
+            print(f"\nFinal compilation errors:")
+            for err in errors[:5]:
+                print(f"  [{err.error_code}] Line {err.line}: {err.message}")
+            if len(errors) > 5:
+                print(f"  ... and {len(errors) - 5} more errors")
+
+        raise RuntimeError(f"Migration failed for {output_filename} after {self.max_retries} retries. Files preserved in {self.output_dir}")
 
     def _log_failure(self, filename: str, errors: List[CompilerError], log_dir: str) -> None:
         """Log failure details for debugging"""
