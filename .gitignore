@@ -121,6 +121,11 @@ ehthumbs.db
 Desktop.ini
 
 # Migration-specific
+# Ignore legacy source packages (large input files)
+legacy-src/
+!legacy-src/.gitkeep
+!legacy-src/README.md
+
 # Keep generated migration artifacts but ignore temporary files
 legacy-code/*/.staging_metadata.json.tmp
 legacy-code/*/.verification_*.tmp
