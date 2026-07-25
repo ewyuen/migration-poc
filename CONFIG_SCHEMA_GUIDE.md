@@ -1,8 +1,8 @@
-# Config.yaml Schema & Customization Guide
+# migration_config.yaml Schema & Customization Guide
 
 ## Overview
 
-The `config.yaml` file is the single source of truth for the migration system. It defines:
+The `migration_config.yaml` file is the single source of truth for the migration system. It defines:
 - Global settings for all migrations
 - Agent definitions and responsibilities
 - Workflow sequence and stage ordering
@@ -614,7 +614,7 @@ error_handling:
 
 ```bash
 # Check YAML syntax
-python -c "import yaml; yaml.safe_load(open('config.yaml')); print('✅ Valid')"
+python -c "import yaml; yaml.safe_load(open('migration_config.yaml')); print('✅ Valid')"
 
 # Check against schema
 python -c "from orchestrator_v2 import OrchestratorV2; o = OrchestratorV2(); print('✅ Schema valid')"
@@ -712,18 +712,18 @@ logging:
 ### Config Not Found
 
 ```bash
-# Ensure config.yaml is in repository root
-ls -la config.yaml
+# Ensure migration_config.yaml is in repository root
+ls -la migration_config.yaml
 
 # Or specify explicit path
-python orchestrator_v2.py ComponentName --config /path/to/config.yaml
+python orchestrator_v2.py ComponentName --config /path/to/migration_config.yaml
 ```
 
 ### Agent Not Recognized
 
 ```bash
 # Verify agent name in config matches orchestrator code
-grep "name: agent_name" config.yaml
+grep "name: agent_name" migration_config.yaml
 
 # Check if entrypoint file exists
 ls -la migration-poc/agents/agent_name.py
@@ -741,7 +741,7 @@ ls -la migration-poc/agents/agent_name.py
 
 ## Best Practices
 
-1. **Keep config.yaml in version control** - Track all changes
+1. **Keep migration_config.yaml in version control** - Track all changes
 2. **Use consistent paths** - Relative to repository root
 3. **Document custom changes** - Add comments explaining modifications
 4. **Test config changes** - Validate with small components first
@@ -754,7 +754,7 @@ ls -la migration-poc/agents/agent_name.py
 
 To migrate from an older config version:
 
-1. Backup old config: `cp config.yaml config.yaml.bak`
+1. Backup old config: `cp migration_config.yaml migration_config.yaml.bak`
 2. Create new config with updated schema
 3. Migrate custom settings from old config
 4. Test with a small component first
@@ -765,7 +765,7 @@ To migrate from an older config version:
 ## Support
 
 For config issues:
-1. Validate syntax: `python -c "import yaml; yaml.safe_load(open('config.yaml'))"`
+1. Validate syntax: `python -c "import yaml; yaml.safe_load(open('migration_config.yaml'))"`
 2. Check MIGRATION_SYSTEM.md for detailed info
 3. Review example configs above
 4. Check audit logs for specific errors

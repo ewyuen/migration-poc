@@ -65,11 +65,11 @@ class OrchestratorV2:
 
     def __init__(self, config_path: str = None):
         if config_path is None:
-            # Try to find config.yaml in parent directory or current directory
-            if os.path.exists("../config.yaml"):
-                config_path = "../config.yaml"
+            # Try to find migration_config.yaml in parent directory or current directory
+            if os.path.exists("../migration_config.yaml"):
+                config_path = "../migration_config.yaml"
             else:
-                config_path = "config.yaml"
+                config_path = "migration_config.yaml"
 
         self.config_path = config_path
         self.config = self._load_config()

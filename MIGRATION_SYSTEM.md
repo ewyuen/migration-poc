@@ -19,7 +19,7 @@
 
 The **Component Migration System** is an AI-powered, multi-agent orchestration platform designed to automate the migration of legacy .NET components to .NET 10. It provides:
 
-- **Config-driven agent management** - Define all agents and their responsibilities in config.yaml
+- **Config-driven agent management** - Define all agents and their responsibilities in migration_config.yaml
 - **Sequential workflow pipeline** - 7-stage orchestrated process from discovery to verification
 - **Automated code transformation** - Modernize legacy code with dependency injection and async patterns
 - **BDD test generation** - Create Gherkin specs and convert them to executable xUnit tests
@@ -68,7 +68,7 @@ The **Component Migration System** is an AI-powered, multi-agent orchestration p
 
 ```
 migration_poc/
-├── config.yaml                 # Agent definitions & workflow config
+├── migration_config.yaml                 # Agent definitions & workflow config
 ├── MIGRATION_SYSTEM.md        # This documentation
 ├── legacy-src/                # Original legacy components
 │   ├── TestService/           # Example test component
@@ -146,9 +146,9 @@ git merge MyComponent-migration-20260724
 
 ## Configuration Guide
 
-### config.yaml Structure
+### migration_config.yaml Structure
 
-The system is entirely configured through `config.yaml`. Key sections:
+The system is entirely configured through `migration_config.yaml`. Key sections:
 
 #### Global Settings
 
@@ -659,7 +659,7 @@ To modify agent behavior, edit the corresponding file in `migration-poc/agents/`
 To add a new agent:
 
 1. Create new agent file: `migration-poc/agents/my_agent.py`
-2. Add to config.yaml:
+2. Add to migration_config.yaml:
    ```yaml
    my_agent:
      name: my_agent
