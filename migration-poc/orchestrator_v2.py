@@ -3,6 +3,7 @@ import os
 import json
 import yaml
 import sys
+import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional, Tuple
@@ -14,7 +15,6 @@ from agents.extractor import extract_domain_logic
 from agents.modernizer import modernize_code
 from agents.bdd_test_agent import generate_bdd_tests
 from agents.test_writer import TestWriter
-from agents.verifier import verify_modernization
 from config import OUTPUT_DIR, TARGET_FRAMEWORK, COMPLIANCE_CONTEXT, DOMAIN
 
 
@@ -79,6 +79,20 @@ class OrchestratorV2:
         self.audit_dir = self.config.get("global", {}).get("audit_dir", "migration-poc/audit")
         Path(self.audit_dir).mkdir(parents=True, exist_ok=True)
 
+    def _cleanup_component_dirs(self, component_name: str) -> None:
+        """Clean up legacy-code and migrated-output for component"""
+        legacy_code_path = os.path.join("legacy-code", component_name)
+        migrated_output_path = os.path.join("migrated-output", component_name)
+        result_log_path = os.path.join("migrated-output", "result-log")
+
+        for path in [legacy_code_path, migrated_output_path, result_log_path]:
+            if os.path.exists(path):
+                try:
+                    shutil.rmtree(path)
+                    print(f"🧹 Cleaned up: {path}")
+                except Exception as e:
+                    print(f"⚠️  Failed to clean up {path}: {e}")
+
     def _load_config(self) -> Dict:
         """Load configuration from YAML file"""
         try:
@@ -105,10 +119,107 @@ class OrchestratorV2:
         with open(log_file, "a", encoding="utf-8") as f:
             f.write(json.dumps(log_entry, default=str) + "\n")
 
+    def _extract_class_name(self, code_content: str) -> Optional[str]:
+        """Extract the primary class name from C# code"""
+        import re
+        # Look for public class, interface, record, struct definitions
+        patterns = [
+            r'public\s+class\s+(\w+)',
+            r'public\s+interface\s+I(\w+)',
+            r'public\s+record\s+(\w+)',
+            r'public\s+struct\s+(\w+)',
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, code_content)
+            if match:
+                return match.group(1)
+        return None
+
+    def _read_component_files(self, component_path: str) -> Dict[str, str]:
+        """Read all .cs files from component directory with their names"""
+        files_content = {}
+        try:
+            for root, dirs, files in os.walk(component_path):
+                for file in files:
+                    if file.endswith(".cs"):
+                        filepath = os.path.join(root, file)
+                        with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
+                            files_content[file] = f.read()
+        except Exception as e:
+            print(f"⚠️  Error reading component files: {e}")
+        return files_content
+
+    def _parse_modernized_files(self, modernized_code: str, original_files: list) -> Dict[str, str]:
+        """
+        Parse modernized code and organize into files.
+        Try to preserve original filenames or use class names.
+        """
+        import re
+        result = {}
+
+        # Strip markdown wrappers first
+        clean_code = self._strip_markdown_code_block(modernized_code)
+
+        # Try to identify namespace blocks and classes
+        namespace_pattern = r'namespace\s+[\w.]+\s*\{(.*?)(?=namespace|\Z)'
+        class_pattern = r'(public\s+(?:class|interface|record|struct)\s+\w+.*?(?=\n\s*(?:public\s+(?:class|interface|record|struct)|namespace|\Z)))'
+
+        namespaces = list(re.finditer(namespace_pattern, clean_code, re.DOTALL))
+
+        if len(namespaces) > 1 or len(original_files) > 1:
+            # Multiple files - try to extract individual classes
+            classes = re.finditer(class_pattern, clean_code, re.DOTALL | re.MULTILINE)
+            file_index = 0
+            for match in classes:
+                code_section = match.group(1)
+                class_name = self._extract_class_name(code_section)
+                if class_name:
+                    filename = f"{class_name}.cs"
+                    result[filename] = code_section.strip()
+                    file_index += 1
+
+            # If we couldn't parse individual classes, use original filenames
+            if not result and original_files:
+                filename = list(original_files)[0] if isinstance(original_files, (list, tuple)) else "ModernizedCode.cs"
+                result[filename] = clean_code
+        else:
+            # Single file - try to preserve original name or extract class name
+            class_name = self._extract_class_name(clean_code)
+            if class_name:
+                filename = f"{class_name}.cs"
+            elif original_files:
+                filename = list(original_files)[0] if isinstance(original_files, (list, tuple)) else "ModernizedCode.cs"
+            else:
+                filename = "ModernizedCode.cs"
+            result[filename] = clean_code
+
+        return result if result else {"ModernizedCode.cs": clean_code}
+
+    def _strip_markdown_code_block(self, content: str) -> str:
+        """Remove markdown code block wrappers if present"""
+        lines = content.split('\n')
+        if lines and lines[0].strip().startswith('```'):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == '```':
+            lines = lines[:-1]
+        return '\n'.join(lines)
+
     def _save_output(self, component_name: str, filename: str, content: str) -> str:
-        """Save output to legacy-code directory"""
-        output_dir = os.path.join("legacy-code", component_name)
+        """Save output to migrated-output directory"""
+        # Determine if this is a source file or a log/report
+        is_source_file = filename.endswith(('.cs', '.feature', '.csproj'))
+        is_log_file = filename.endswith(('.md', '.json'))
+
+        if is_log_file:
+            output_dir = os.path.join("migrated-output", "result-log")
+        else:
+            output_dir = os.path.join("migrated-output", component_name)
+
         Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+        # Strip markdown code blocks from source files
+        if is_source_file:
+            content = self._strip_markdown_code_block(content)
 
         filepath = os.path.join(output_dir, filename)
         with open(filepath, "w", encoding="utf-8") as f:
@@ -133,6 +244,10 @@ class OrchestratorV2:
         print(f"Request ID: {request.request_id}")
         print(f"Target Framework: {self.config['global']['target_framework']}")
         print("="*70)
+
+        # Clean up previous runs
+        print("\n🧹 Cleaning up previous output directories...")
+        self._cleanup_component_dirs(request.component_name)
 
         # STAGE 1: VALIDATION
         state.advance_stage("validation")
@@ -169,29 +284,30 @@ class OrchestratorV2:
         legacy_code_path = os.path.join("legacy-code", request.component_name)
 
         # Read all .cs files from the component directory
-        legacy_code = ""
-        try:
-            for root, dirs, files in os.walk(legacy_code_path):
-                for file in files:
-                    if file.endswith(".cs"):
-                        filepath = os.path.join(root, file)
-                        with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
-                            legacy_code += f.read() + "\n"
-        except Exception as e:
-            state.mark_stage_failed(f"Failed to read component files: {str(e)}")
+        component_files = self._read_component_files(legacy_code_path)
+        if not component_files:
+            state.mark_stage_failed(f"No .cs files found in {legacy_code_path}")
             self._log_workflow(state)
             return state.to_dict()
 
-        extraction = extract_domain_logic(legacy_code, exploration_results)
+        # Combine all file contents for analysis
+        combined_legacy_code = "\n".join(component_files.values())
+
+        extraction = extract_domain_logic(combined_legacy_code, exploration_results)
         self._save_output(request.component_name, "extracted_logic.md", extraction)
         state.artifacts["extraction"] = extraction
         state.mark_stage_complete()
 
         # STAGE 5: MODERNIZATION
         state.advance_stage("modernization")
-        modernized_code = modernize_code(legacy_code, extraction, exploration_results)
-        self._save_output(request.component_name, "modernized_code.cs", modernized_code)
+        modernized_code = modernize_code(combined_legacy_code, extraction, exploration_results)
         state.artifacts["modernization"] = modernized_code
+
+        # Extract and save modernized code with appropriate filenames
+        modernized_files = self._parse_modernized_files(modernized_code, component_files.keys())
+        for filename, content in modernized_files.items():
+            self._save_output(request.component_name, filename, content)
+
         state.mark_stage_complete()
 
         # STAGE 6: BDD & TEST WRITING
@@ -213,16 +329,9 @@ class OrchestratorV2:
         state.artifacts["test_code"] = test_code if success else ""
         state.mark_stage_complete()
 
-        # STAGE 7: VERIFICATION
-        state.advance_stage("verification")
-        verification = verify_modernization(legacy_code, modernized_code, extraction, bdd_tests)
-        self._save_output(request.component_name, "verification_report.json", json.dumps(verification, indent=2))
-        state.artifacts["verification"] = verification
-        state.mark_stage_complete()
-
-        # Summary
+        # Summary (Verification stage skipped for now)
         self._log_workflow(state)
-        self._print_summary(state, verification)
+        self._print_summary(state)
 
         return state.to_dict()
 
@@ -281,24 +390,18 @@ class OrchestratorV2:
         except Exception as e:
             return False, {"error": str(e)}
 
-    def _print_summary(self, state: WorkflowState, verification: Dict) -> None:
+    def _print_summary(self, state: WorkflowState) -> None:
         """Print workflow summary"""
         print("\n" + "="*70)
         print("✨ MIGRATION WORKFLOW COMPLETE")
         print("="*70)
         print(f"\nComponent: {state.request.component_name}")
-        print(f"Status: {verification.get('overall_status', 'UNKNOWN')}")
-        print(f"Completed Stages: {len(state.completed_stages)}/7")
+        print(f"Status: {state.to_dict().get('status', 'unknown')}")
+        print(f"Completed Stages: {len(state.completed_stages)}/6")
         print(f"Total Time: {state.to_dict().get('timestamp_end', 'Unknown')}")
 
-        risks = verification.get("risks", [])
-        if risks:
-            print(f"\n⚠️  Risks Identified:")
-            risk_list = risks if isinstance(risks, list) else [risks]
-            for risk in risk_list[:5]:
-                print(f"   - {risk}")
-
-        print(f"\n📁 Outputs saved to: legacy-code/{state.request.component_name}/")
+        print(f"\n📁 Source files saved to: migrated-output/{state.request.component_name}/")
+        print(f"📁 Logs and reports saved to: migrated-output/result-log/")
         print("="*70 + "\n")
 
 

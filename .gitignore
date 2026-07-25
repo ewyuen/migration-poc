@@ -236,27 +236,14 @@ migration-poc/audit/*.jsonl
 migration-poc/audit/*.log
 migration-poc/output/
 
-# Temporary component staging
-# NOTE: Keep legacy-code/ for review, but ignore large build artifacts
-legacy-code/*/bin/
-legacy-code/*/obj/
-legacy-code/**/*.bin/
-legacy-code/**/*.obj/
-legacy-code/**/**/bin/
-legacy-code/**/**/obj/
-legacy-code/*/.vs/
-legacy-code/*/.vscode/
-legacy-code/*/venv/
-legacy-code/*/__pycache__/
+# Temporary component staging - ignore all copied components
+# These are generated from legacy-src during orchestrator runs
+legacy-code/
+!legacy-code/.gitkeep
 
-# Keep source files but ignore build artifacts in legacy-code
-!legacy-code/*/
-!legacy-code/**/*.cs
-!legacy-code/**/*.feature
-!legacy-code/**/*.md
-!legacy-code/**/*.json
-!legacy-code/**/.staging_metadata.json
-!legacy-code/**/*.csproj
+# Migrated output - generated during orchestrator runs
+migrated-output/
+!migrated-output/.gitkeep
 
 # Python cache in migration-poc
 migration-poc/__pycache__/
