@@ -3,6 +3,7 @@ import os
 import json
 import yaml
 import sys
+import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional, Tuple
@@ -79,6 +80,19 @@ class OrchestratorV2:
         self.audit_dir = self.config.get("global", {}).get("audit_dir", "migration-poc/audit")
         Path(self.audit_dir).mkdir(parents=True, exist_ok=True)
 
+    def _cleanup_component_dirs(self, component_name: str) -> None:
+        """Clean up legacy-code and migrated-output for component"""
+        legacy_code_path = os.path.join("legacy-code", component_name)
+        migrated_output_path = os.path.join("migrated-output", component_name)
+
+        for path in [legacy_code_path, migrated_output_path]:
+            if os.path.exists(path):
+                try:
+                    shutil.rmtree(path)
+                    print(f"🧹 Cleaned up: {path}")
+                except Exception as e:
+                    print(f"⚠️  Failed to clean up {path}: {e}")
+
     def _load_config(self) -> Dict:
         """Load configuration from YAML file"""
         try:
@@ -133,6 +147,10 @@ class OrchestratorV2:
         print(f"Request ID: {request.request_id}")
         print(f"Target Framework: {self.config['global']['target_framework']}")
         print("="*70)
+
+        # Clean up previous runs
+        print("\n🧹 Cleaning up previous output directories...")
+        self._cleanup_component_dirs(request.component_name)
 
         # STAGE 1: VALIDATION
         state.advance_stage("validation")
