@@ -426,17 +426,17 @@ class OrchestratorV2:
         state.advance_stage("bdd_and_testing")
         modernized_code_str = "\n\n".join(all_modernized_code.values())
         bdd_tests = generate_bdd_tests(modernized_code_str, modernized_code_str, exploration_results)
-        self._save_output(request.component_name, os.path.join("tests", "scenarios.feature"), bdd_tests)
+        self._save_output(request.component_name, "scenarios.feature", bdd_tests)
 
         # Generate executable tests from Gherkin (NEW)
         success, error, test_code = self.test_writer.write_tests_from_gherkin(
             bdd_tests,
             request.component_name,
-            self._save_output(request.component_name, os.path.join("tests", f"{request.component_name}.Tests.cs"), "")
+            self._save_output(request.component_name, f"{request.component_name}.Tests.cs", "")
         )
 
         if success:
-            self._save_output(request.component_name, os.path.join("tests", f"{request.component_name}.Tests.cs"), test_code)
+            self._save_output(request.component_name, f"{request.component_name}.Tests.cs", test_code)
             # Run TestOrchestrator for self-healing test generation and compilation
             print("🔄 Running TestOrchestrator for self-healing test generation...")
             orchestrator_result = self.test_orchestrator.execute(request.component_name)
