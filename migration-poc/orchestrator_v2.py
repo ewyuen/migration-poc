@@ -84,8 +84,9 @@ class OrchestratorV2:
         """Clean up legacy-code and migrated-output for component"""
         legacy_code_path = os.path.join("legacy-code", component_name)
         migrated_output_path = os.path.join("migrated-output", component_name)
+        result_log_path = os.path.join("migrated-output", "result-log")
 
-        for path in [legacy_code_path, migrated_output_path]:
+        for path in [legacy_code_path, migrated_output_path, result_log_path]:
             if os.path.exists(path):
                 try:
                     shutil.rmtree(path)
@@ -119,10 +120,31 @@ class OrchestratorV2:
         with open(log_file, "a", encoding="utf-8") as f:
             f.write(json.dumps(log_entry, default=str) + "\n")
 
+    def _strip_markdown_code_block(self, content: str) -> str:
+        """Remove markdown code block wrappers if present"""
+        lines = content.split('\n')
+        if lines and lines[0].strip().startswith('```'):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == '```':
+            lines = lines[:-1]
+        return '\n'.join(lines)
+
     def _save_output(self, component_name: str, filename: str, content: str) -> str:
         """Save output to migrated-output directory"""
-        output_dir = os.path.join("migrated-output", component_name)
+        # Determine if this is a source file or a log/report
+        is_source_file = filename.endswith(('.cs', '.feature', '.csproj'))
+        is_log_file = filename.endswith(('.md', '.json'))
+
+        if is_log_file:
+            output_dir = os.path.join("migrated-output", "result-log")
+        else:
+            output_dir = os.path.join("migrated-output", component_name)
+
         Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+        # Strip markdown code blocks from source files
+        if is_source_file:
+            content = self._strip_markdown_code_block(content)
 
         filepath = os.path.join(output_dir, filename)
         with open(filepath, "w", encoding="utf-8") as f:
@@ -316,7 +338,8 @@ class OrchestratorV2:
             for risk in risk_list[:5]:
                 print(f"   - {risk}")
 
-        print(f"\n📁 Outputs saved to: migrated-output/{state.request.component_name}/")
+        print(f"\n📁 Source files saved to: migrated-output/{state.request.component_name}/")
+        print(f"📁 Logs and reports saved to: migrated-output/result-log/")
         print("="*70 + "\n")
 
 
