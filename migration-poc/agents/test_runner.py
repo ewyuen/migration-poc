@@ -4,9 +4,16 @@ import subprocess
 from pathlib import Path
 from typing import Dict, List, Tuple
 
-def generate_test_csproj(tests_dir: str) -> None:
-    """Generate a tests.csproj file dynamically under the tests subdirectory"""
-    csproj_content = """<Project Sdk="Microsoft.NET.Sdk">
+def generate_test_csproj(tests_dir: str, component_name: str = None) -> None:
+    """Generate a tests.csproj file that references the source project from Step 4"""
+    # Determine the source project name and path
+    if component_name is None:
+        # Extract component name from tests_dir path: .../TestService/tests -> TestService
+        component_name = os.path.basename(os.path.dirname(tests_dir))
+
+    src_csproj_path = f"..\\src\\{component_name}.csproj"
+
+    csproj_content = f"""<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -15,8 +22,15 @@ def generate_test_csproj(tests_dir: str) -> None:
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
 
+  <!-- Reference the source project from Step 4 -->
   <ItemGroup>
-    <Compile Include="..\\*.cs" Exclude="..\\obj\\**;..\\bin\\**" />
+    <ProjectReference Include="{src_csproj_path}" />
+  </ItemGroup>
+
+  <!-- Include test files from this directory -->
+  <ItemGroup>
+    <Compile Include="*.Tests.cs" />
+    <Compile Include="*.cs" Exclude="*.Tests.cs" />
   </ItemGroup>
 
   <ItemGroup>
@@ -46,6 +60,7 @@ def generate_test_csproj(tests_dir: str) -> None:
     with open(csproj_path, "w", encoding="utf-8") as f:
         f.write(csproj_content)
     print(f"🛠️ Generated test project file: {csproj_path}")
+    print(f"   References: {src_csproj_path}")
 
 def run_test_runner(component_name: str, base_output_dir: str = "migrated-output") -> Dict:
     """
@@ -67,8 +82,8 @@ def run_test_runner(component_name: str, base_output_dir: str = "migrated-output
         print(f"❌ {msg}")
         return report
 
-    # 1. Generate tests.csproj
-    generate_test_csproj(tests_dir)
+    # 1. Generate tests.csproj (references source project from Step 4)
+    generate_test_csproj(tests_dir, component_name)
 
     # 2. Run dotnet test
     print(f"🏃 Running dotnet test with coverage collection in {tests_dir}...")
