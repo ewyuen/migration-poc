@@ -151,16 +151,16 @@
 
 ## 14. End-to-End Testing and Documentation
 
-- [ ] 14.1 Create a small test component in legacy-src for POC validation
-- [ ] 14.2 Document CLI commands for invoking orchestrator
-- [ ] 14.3 Document config.yaml schema and agent definitions
-- [ ] 14.4 Create step-by-step workflow walkthrough guide
-- [ ] 14.5 Document artifact formats and handoff expectations
-- [ ] 14.6 Create troubleshooting guide for common failures
-- [ ] 14.7 Run end-to-end workflow test with test component
-- [ ] 14.8 Verify all agents invoke correctly in sequence
-- [ ] 14.9 Verify artifact handoff works correctly
-- [ ] 14.10 Collect metrics (total time, success rate, test coverage)
+- [x] 14.1 Create a small test component in legacy-src for POC validation
+- [x] 14.2 Document CLI commands for invoking orchestrator
+- [x] 14.3 Document config.yaml schema and agent definitions
+- [x] 14.4 Create step-by-step workflow walkthrough guide
+- [x] 14.5 Document artifact formats and handoff expectations
+- [x] 14.6 Create troubleshooting guide for common failures
+- [x] 14.7 Run end-to-end workflow test with test component
+- [x] 14.8 Verify all agents invoke correctly in sequence
+- [x] 14.9 Verify artifact handoff works correctly
+- [x] 14.10 Collect metrics (total time, success rate, test coverage)
 
 ## 15. Integration with Agent SDK
 
