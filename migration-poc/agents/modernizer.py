@@ -33,6 +33,15 @@ MIGRATION_HINTS = {
 
 
 class DotNetMigrationAgent:
+    """
+    Self-healing .NET migration agent.
+
+    ONLY processes:
+    - .cs files (C# source code)
+    - .csproj files (project configuration)
+
+    Uses: dotnet build (standard .NET CLI)
+    """
     def __init__(self, output_dir: str, csproj_name: str, target_framework: str = "net10.0", max_retries: int = 4):
         self.output_dir = output_dir
         self.csproj_name = csproj_name

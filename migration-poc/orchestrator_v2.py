@@ -139,7 +139,10 @@ class OrchestratorV2:
         return None
 
     def _read_component_files(self, component_path: str) -> Dict[str, str]:
-        """Read only source .cs files (skip obj/, bin/, and generated files)"""
+        """
+        Read ONLY .cs source files (no other file types).
+        Excludes: obj/, bin/, .vs/, packages/, and generated files.
+        """
         files_content = {}
         try:
             # Exclude generated directories and files
@@ -315,18 +318,20 @@ class OrchestratorV2:
         output_src_dir = os.path.join("migrated-output", request.component_name, "src")
         failure_log_dir = os.path.join("migrated-output", "result-log")
 
-        # Read all .cs files from the component directory
+        # IMPORTANT: Only process .cs and .csproj files
+        # Read .cs source files only (exclude obj/, bin/, generated files)
         component_files = self._read_component_files(legacy_code_path)
         if not component_files:
             state.mark_stage_failed(f"No .cs files found in {legacy_code_path}")
             self._log_workflow(state)
             return state.to_dict()
 
-        # Find .csproj in legacy code (assumes one project per component)
+        # Find .csproj file in legacy code (exactly one per component)
         csproj_path = None
         csproj_name = None
         for root, dirs, files in os.walk(legacy_code_path):
             for file in files:
+                # Only process .csproj files
                 if file.endswith(".csproj"):
                     csproj_path = os.path.join(root, file)
                     csproj_name = file
