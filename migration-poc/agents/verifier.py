@@ -124,17 +124,29 @@ def _parse_coverage_results(tests_dir: str) -> tuple:
         return 0.0, 0.0
 
 
-def run_tests_and_collect_coverage(component_name: str, base_output_dir: str = "migrated-output") -> dict:
+def run_tests_and_collect_coverage(
+    component_name: str,
+    base_output_dir: str = "migrated-output",
+    commented_tests: list = None,
+    commented_classes: list = None,
+) -> dict:
     """
     Compile, execute unit tests, and collect code coverage.
-    
+
+    Args:
+        component_name: Name of the migrated service
+        base_output_dir: Base output directory
+        commented_tests: Test methods Stage 5 commented out after exhausting its self-healing
+            retries (surfaced here so the final report shows what couldn't be made to compile)
+        commented_classes: Helper classes (fixtures/fakes) Stage 5 commented out for the same reason
+
     Returns:
         Dictionary verification report
     """
     print(f"🧪 Starting test runner agent for component: {component_name}...")
     component_dir = os.path.join(base_output_dir, component_name)
     tests_dir = os.path.join(component_dir, "tests")
-    
+
     report = {
         "status": "FAIL",
         "compiled": False,
@@ -145,7 +157,9 @@ def run_tests_and_collect_coverage(component_name: str, base_output_dir: str = "
         "line_coverage": 0.0,
         "branch_coverage": 0.0,
         "failures": [],
-        "errors": []
+        "errors": [],
+        "commented_tests": commented_tests or [],
+        "commented_classes": commented_classes or [],
     }
     
     if not os.path.exists(tests_dir):
@@ -242,6 +256,21 @@ def _write_reports(component_name: str, report: dict) -> None:
 - **Branch Coverage**: {report["branch_coverage"]:.2f}%
 
 """
+
+    commented_tests = report.get("commented_tests") or []
+    commented_classes = report.get("commented_classes") or []
+    if commented_tests or commented_classes:
+        md_content += "## Commented-Out Tests (Stage 5 self-healing exhausted)\n"
+        md_content += "The following could not be made to compile after Stage 5's self-healing attempts and were commented out:\n\n"
+        if commented_tests:
+            md_content += "### Test Methods\n"
+            for name in commented_tests:
+                md_content += f"- {name}\n"
+        if commented_classes:
+            md_content += "### Related Classes (fixtures/fakes)\n"
+            for name in commented_classes:
+                md_content += f"- {name}\n"
+        md_content += "\n"
 
     if not report["compiled"]:
         md_content += "## Build/Compilation Errors\n```\n"

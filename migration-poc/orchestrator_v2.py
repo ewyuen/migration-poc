@@ -455,14 +455,24 @@ class OrchestratorV2:
             else:
                 print(f"⚠️ Test file not found after orchestration: {test_file_path}")
 
-            # Report commented tests if any
+            # Report commented tests/classes if any
             commented_tests = orchestrator_result.get("commented_tests", [])
+            commented_classes = orchestrator_result.get("commented_classes", [])
+            uncommentable_errors = orchestrator_result.get("uncommentable_errors", [])
             if commented_tests:
                 print(f"⚠️ {len(commented_tests)} test methods were commented out due to compilation issues:")
                 for test_name in commented_tests[:5]:
                     print(f"   - {test_name}")
                 if len(commented_tests) > 5:
                     print(f"   ... and {len(commented_tests) - 5} more")
+            if commented_classes:
+                print(f"⚠️ {len(commented_classes)} helper classes were commented out due to compilation issues:")
+                for class_name in commented_classes[:5]:
+                    print(f"   - {class_name}")
+                if len(commented_classes) > 5:
+                    print(f"   ... and {len(commented_classes) - 5} more")
+            if uncommentable_errors:
+                print(f"⚠️ {len(uncommentable_errors)} compilation error(s) could not be mapped to a test/class (likely Stage 4 source or project-level issues) and remain unresolved.")
 
             # Capture orchestration result
             state.artifacts["test_orchestration"] = orchestrator_result
@@ -476,7 +486,12 @@ class OrchestratorV2:
         # STAGE 6: VERIFICATION (Compilation, Test Execution & Coverage)
         state.advance_stage("verification")
         try:
-            verification_results = run_tests_and_collect_coverage(request.component_name)
+            test_orchestration = state.artifacts.get("test_orchestration", {})
+            verification_results = run_tests_and_collect_coverage(
+                request.component_name,
+                commented_tests=test_orchestration.get("commented_tests", []),
+                commented_classes=test_orchestration.get("commented_classes", []),
+            )
             state.artifacts["verification"] = verification_results
             if verification_results.get("status") == "PASS":
                 state.mark_stage_complete()

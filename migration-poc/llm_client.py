@@ -4,7 +4,7 @@ import json
 from config import OPENROUTER_API_KEY, OPENROUTER_BASE_URL, MODEL
 
 
-def call_llm(prompt: str, system: str = "", max_tokens: int = 2000) -> str:
+def call_llm(prompt: str, system: str = "", max_tokens: int = 2000, temperature: float = 0.7) -> str:
     """
     Call DeepSeek via OpenRouter API
 
@@ -12,6 +12,7 @@ def call_llm(prompt: str, system: str = "", max_tokens: int = 2000) -> str:
         prompt: User message/prompt
         system: System prompt for context
         max_tokens: Max response length
+        temperature: Sampling temperature (lower = more deterministic)
 
     Returns:
         LLM response text
@@ -31,7 +32,7 @@ def call_llm(prompt: str, system: str = "", max_tokens: int = 2000) -> str:
         "model": MODEL,
         "messages": messages,
         "max_tokens": max_tokens,
-        "temperature": 0.7,
+        "temperature": temperature,
     }
 
     try:

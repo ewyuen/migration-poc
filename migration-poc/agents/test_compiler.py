@@ -27,11 +27,7 @@ def generate_test_csproj(tests_dir: str, component_name: str = None) -> None:
     <ProjectReference Include="{src_csproj_path}" />
   </ItemGroup>
 
-  <!-- Include test files from this directory -->
-  <ItemGroup>
-    <Compile Include="*.Tests.cs" />
-    <Compile Include="*.cs" Exclude="*.Tests.cs" />
-  </ItemGroup>
+  <!-- Test files under this directory are picked up by the SDK's default Compile globbing -->
 
   <ItemGroup>
     <Using Include="FluentValidation" />
