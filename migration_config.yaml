@@ -10,7 +10,7 @@ global:
   legacy_code_dir: legacy-code
   output_dir: migration-poc/output
   audit_dir: migration-poc/audit
-  target_framework: net10
+  target_framework: net10.0
   allow_parallel: false  # Sequential execution for now
 
 # Orchestrator: Central coordinator
