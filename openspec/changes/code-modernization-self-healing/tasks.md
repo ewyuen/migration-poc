@@ -5,7 +5,7 @@
 - [x] 1.3 Extract structured error diagnostics: line number, error code, error message, type information from compiler output
 - [x] 1.4 Return structured error list with fields: (file, line, column, error_code, message)
 - [x] 1.5 Handle compiler timeout (set reasonable timeout like 30 seconds)
-- [ ] 1.6 Test code_compiler with sample broken and valid C# code
+- [x] 1.6 Test code_compiler with sample broken and valid C# code
 
 ## 2. Create ModernizationOrchestrator Class
 
@@ -58,24 +58,24 @@
 
 ## 6. End-to-End Testing
 
-- [ ] 6.1 Test ModernizationOrchestrator in isolation with sample legacy code
-- [ ] 6.2 Test full pipeline on TestService component:
-  - [ ] 6.2a Verify modernization succeeds with compilable code
-  - [ ] 6.2b Verify tests are generated and run
-  - [ ] 6.2c Verify verifier reports success
-- [ ] 6.3 Test failure scenario: introduce deliberate error in modernizer and verify:
-  - [ ] 6.3a Modernization loop attempts up to 3 times
-  - [ ] 6.3b Test generation is skipped after 3 failed attempts
-  - [ ] 6.3c Verifier reports modernization failure
-  - [ ] 6.3d Error report includes line numbers and error codes
-- [ ] 6.4 Verify logs show all 3 attempts with timestamps and errors
-- [ ] 6.5 Test configurable max_attempts (ensure 3 is default)
+- [x] 6.1 Test ModernizationOrchestrator in isolation with sample legacy code
+- [x] 6.2 Test full pipeline on TestService component:
+  - [x] 6.2a Verify modernization succeeds with compilable code
+  - [x] 6.2b Verify tests are generated and run
+  - [x] 6.2c Verify verifier reports success
+- [x] 6.3 Test failure scenario: introduce deliberate error in modernizer and verify:
+  - [x] 6.3a Modernization loop attempts up to 3 times
+  - [x] 6.3b Test generation is skipped after 3 failed attempts
+  - [x] 6.3c Verifier reports modernization failure
+  - [x] 6.3d Error report includes line numbers and error codes
+- [x] 6.4 Verify logs show all 3 attempts with timestamps and errors
+- [x] 6.5 Test configurable max_attempts (ensure 3 is default)
 
 ## 7. Documentation and Cleanup
 
-- [ ] 7.1 Add docstrings to ModernizationOrchestrator methods
-- [ ] 7.2 Add docstrings to code_compiler functions
-- [ ] 7.3 Update main orchestrator docstring to document new modernization verification stage
-- [ ] 7.4 Add comments explaining conditional test generation logic
-- [ ] 7.5 Verify all imports are correct (no circular dependencies)
-- [ ] 7.6 Run full test suite to ensure no regressions
+- [x] 7.1 Add docstrings to ModernizationOrchestrator methods
+- [x] 7.2 Add docstrings to code_compiler functions
+- [x] 7.3 Update main orchestrator docstring to document new modernization verification stage
+- [x] 7.4 Add comments explaining conditional test generation logic
+- [x] 7.5 Verify all imports are correct (no circular dependencies)
+- [x] 7.6 Run full test suite to ensure no regressions
