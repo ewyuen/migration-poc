@@ -67,50 +67,6 @@ Be thorough but fair in assessment."""
     return result
 
 
-def _generate_test_csproj(tests_dir: str) -> None:
-    """Generate a tests.csproj file dynamically under the tests subdirectory"""
-    csproj_content = """<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <IsPackable>false</IsPackable>
-    <IsTestProject>true</IsTestProject>
-  </PropertyGroup>
-
-  <ItemGroup>
-    <Compile Include="..\\*.cs" Exclude="..\\obj\\**;..\\bin\\**" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Using Include="FluentValidation" />
-    <Using Include="Microsoft.Extensions.Options" />
-    <Using Include="System.Text" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
-    <PackageReference Include="xunit" Version="2.9.2" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      <PrivateAssets>all</PrivateAssets>
-    </PackageReference>
-    <PackageReference Include="coverlet.collector" Version="6.0.2">
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      <PrivateAssets>all</PrivateAssets>
-    </PackageReference>
-    <PackageReference Include="FluentAssertions" Version="6.12.0" />
-    <PackageReference Include="FluentValidation" Version="11.9.0" />
-    <PackageReference Include="Microsoft.Extensions.Options" Version="8.0.2" />
-  </ItemGroup>
-</Project>
-"""
-    csproj_path = os.path.join(tests_dir, "tests.csproj")
-    with open(csproj_path, "w", encoding="utf-8") as f:
-        f.write(csproj_content)
-    print(f"🛠️ Generated test project file: {csproj_path}")
-
-
 def _parse_trx_results(trx_path: str) -> tuple:
     """Parse test results from .trx file. Returns (total, passed, failed, skipped, failures_list)"""
     failures = []
@@ -198,10 +154,10 @@ def run_tests_and_collect_coverage(component_name: str, base_output_dir: str = "
         print(f"❌ {msg}")
         return report
 
-    # 1. Generate tests.csproj
-    _generate_test_csproj(tests_dir)
-    
-    # 2. Run dotnet test
+    # Note: tests.csproj was already created in Stage 5 by test_compiler.
+    # Stage 6 only runs tests, does not regenerate project file.
+
+    # Run dotnet test
     print(f"🏃 Running dotnet test with coverage collection...")
     cmd = ["dotnet", "test", "--collect:XPlat Code Coverage", "--logger:trx;LogFileName=results.trx"]
     try:
