@@ -7,10 +7,10 @@ from typing import Tuple, List, Dict
 
 def compile_modernized_code(code_content: str, component_name: str, base_output_dir: str = "migrated-output") -> Tuple[bool, List[Dict]]:
     """
-    Compiles modernized C# code in isolation and extracts error diagnostics.
+    Compiles modernized C# code using the generated csproj in the output directory.
 
     Args:
-        code_content: The modernized C# code to compile
+        code_content: The modernized C# code (not used directly - files already saved)
         component_name: Name of the component being compiled
         base_output_dir: Base output directory for the component
 
@@ -18,82 +18,35 @@ def compile_modernized_code(code_content: str, component_name: str, base_output_
         Tuple of (compiled: bool, errors: List[Dict])
         Each error dict contains: {file, line, column, error_code, message}
     """
-    # Create temp directory for compilation
-    temp_dir = os.path.join(base_output_dir, component_name, "temp_compile")
-    Path(temp_dir).mkdir(parents=True, exist_ok=True)
+    # Get the component directory and csproj
+    component_dir = os.path.abspath(os.path.join(base_output_dir, component_name))
+    csproj_path = os.path.join(component_dir, f"{component_name}.csproj")
 
-    # Write code to temporary file
-    temp_file = os.path.join(temp_dir, "ModernizedCode.cs")
-    try:
-        with open(temp_file, "w", encoding="utf-8") as f:
-            f.write(code_content)
-    except Exception as e:
-        return False, [{"file": "unknown", "line": 0, "column": 0, "error_code": "IO", "message": f"Failed to write code file: {str(e)}"}]
+    # Verify csproj exists
+    if not os.path.exists(csproj_path):
+        return False, [{"file": "unknown", "line": 0, "column": 0, "error_code": "IO", "message": f"csproj not found: {csproj_path}"}]
 
-    # Attempt to compile using csc.exe
+    # Compile using dotnet build
     try:
         result = subprocess.run(
-            ["csc.exe", temp_file, "/nologo", "/out:" + os.path.join(temp_dir, "temp.exe")],
+            ["dotnet", "build", csproj_path, "--nologo", "--verbosity", "minimal"],
             capture_output=True,
             text=True,
-            timeout=30
-        )
-
-        # Check if compilation succeeded
-        if result.returncode == 0:
-            return True, []
-
-        # Parse compilation errors
-        errors = _parse_csc_errors(result.stdout + "\n" + result.stderr)
-        return False, errors
-
-    except subprocess.TimeoutExpired:
-        return False, [{"file": "unknown", "line": 0, "column": 0, "error_code": "TIMEOUT", "message": "Compilation timed out after 30 seconds"}]
-    except FileNotFoundError:
-        # csc.exe not found, try dotnet
-        return _compile_with_dotnet(code_content, component_name, temp_file, base_output_dir)
-    except Exception as e:
-        return False, [{"file": "unknown", "line": 0, "column": 0, "error_code": "ERROR", "message": f"Compilation error: {str(e)}"}]
-
-def _compile_with_dotnet(code_content: str, component_name: str, temp_file: str, base_output_dir: str) -> Tuple[bool, List[Dict]]:
-    """
-    Fallback: Compile using dotnet compiler if csc.exe not available.
-    Creates a minimal .csproj file and compiles.
-    """
-    temp_dir = os.path.dirname(temp_file)
-    csproj_path = os.path.join(temp_dir, "Compile.csproj")
-
-    # Create minimal project file
-    csproj_content = """<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-  </PropertyGroup>
-</Project>"""
-
-    try:
-        with open(csproj_path, "w", encoding="utf-8") as f:
-            f.write(csproj_content)
-
-        result = subprocess.run(
-            ["dotnet", "build", csproj_path],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            cwd=temp_dir
+            timeout=60,
+            cwd=component_dir
         )
 
         if result.returncode == 0:
             return True, []
 
+        # Parse compilation errors from dotnet output
         errors = _parse_dotnet_errors(result.stdout + "\n" + result.stderr)
         return False, errors
 
     except subprocess.TimeoutExpired:
-        return False, [{"file": "unknown", "line": 0, "column": 0, "error_code": "TIMEOUT", "message": "Compilation timed out after 30 seconds"}]
+        return False, [{"file": "unknown", "line": 0, "column": 0, "error_code": "TIMEOUT", "message": "Compilation timed out after 60 seconds"}]
     except Exception as e:
-        return False, [{"file": "unknown", "line": 0, "column": 0, "error_code": "ERROR", "message": f"Dotnet compilation error: {str(e)}"}]
+        return False, [{"file": "unknown", "line": 0, "column": 0, "error_code": "ERROR", "message": f"Compilation error: {str(e)}"}]
 
 def _parse_csc_errors(output: str) -> List[Dict]:
     """Parse errors from csc.exe output"""
