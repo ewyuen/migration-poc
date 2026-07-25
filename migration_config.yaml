@@ -192,6 +192,31 @@ test_writer:
     - code_compilation
     - fixture_validity
 
+# Test Orchestrator: Self-healing test generation loop
+test_orchestrator:
+  name: test_orchestrator
+  enabled: true
+  role: self_healing_test_orchestration
+  description: Coordinates test generation and compilation with self-healing loop
+  entrypoint: migration-poc/agents/test_orchestrator.py
+  max_attempts: 4
+  tools:
+    - test_writer_stage
+    - test_runner
+    - error_analyzer
+  input:
+    artifact_type: test_skeleton
+    location: "migrated-output/{component}/tests/{component}.Tests.cs"
+  output:
+    artifacts:
+      - compilable_tests
+      - orchestration_report
+    format: csharp
+    location: "migrated-output/{component}/tests/{component}.Tests.cs"
+  validates:
+    - compilation_success
+    - all_methods_covered
+
 # Verifier: Run tests and verify migration
 verifier:
   name: verifier

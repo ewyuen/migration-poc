@@ -1,7 +1,7 @@
 """Test Writer Pipeline Stage: Orchestrator integration for filling C# test skeletons"""
 import logging
 import os
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 from agents.test_writer.test_writer_agent import TestWriterAgent
 
 
@@ -29,12 +29,13 @@ class TestWriterStage:
         self.filled_tests = []
         self.errors = []
 
-    def execute(self, component_name: str) -> Dict:
+    def execute(self, component_name: str, feedback_errors: Optional[List[str]] = None) -> Dict:
         """
         Execute test writing (filling skeletons) for a component.
 
         Args:
             component_name: Name of the migrated service
+            feedback_errors: Optional list of compilation errors from previous attempts
 
         Returns:
             Result dictionary with status and filled files
@@ -53,6 +54,11 @@ class TestWriterStage:
 
         try:
             self.logger.info(f"Starting test writer stage for {component_name}")
+
+            if feedback_errors:
+                self.logger.info(f"📝 Feedback errors passed ({len(feedback_errors)} errors): using for context in test generation")
+                for err in feedback_errors[:3]:
+                    self.logger.debug(f"  - {err}")
 
             # Directory containing the migrated service components (source code)
             service_dir = os.path.join(self.base_output_dir, component_name)
