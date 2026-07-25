@@ -168,9 +168,11 @@ bdd_generator:
 # Test Writer: Generate C# tests from Gherkin (NEW)
 test_writer:
   name: test_writer
+  enabled: true
+  fail_on_error: false
   role: gherkin_test_implementation
   description: Converts Gherkin specifications into executable C# test code
-  entrypoint: migration-poc/agents/test_writer.py
+  entrypoint: migration-poc/agents/test_writer_stage.py
   tools:
     - gherkin_parser
     - test_code_generator

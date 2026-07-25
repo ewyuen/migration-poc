@@ -77,3 +77,12 @@ speckit:
     level: INFO
     output_format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     log_file: "speckit_generation.log"
+
+  # Test Writer Configuration
+  test_writer:
+    enabled: true
+    language: csharp
+    framework: NUnit
+    libraries:
+      - FluentAssertions
+    generate_fakes: true
