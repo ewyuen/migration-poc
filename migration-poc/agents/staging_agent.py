@@ -31,17 +31,19 @@ class StagingAgent:
         branch_name = self._generate_branch_name(component_name)
 
         try:
-            # Check if branch already exists
-            try:
-                subprocess.run(
-                    ["git", "rev-parse", "--verify", branch_name],
-                    cwd=os.getcwd(),
-                    capture_output=True,
-                    check=False,
-                    timeout=10
-                )
-            except Exception:
-                pass
+            # Check if branch already exists and append time if it does
+            branch_check = subprocess.run(
+                ["git", "rev-parse", "--verify", branch_name],
+                cwd=os.getcwd(),
+                capture_output=True,
+                check=False,
+                timeout=10
+            )
+
+            if branch_check.returncode == 0:
+                # Branch exists, append current time to make it unique
+                time_suffix = datetime.now().strftime("%H%M%S")
+                branch_name = f"{branch_name}-{time_suffix}"
 
             # Create new branch from main
             result = subprocess.run(
