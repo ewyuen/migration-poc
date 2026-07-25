@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "dgSpecHash": "knzo0nv2vzI=",
+  "success": true,
+  "projectFilePath": "c:\\Users\\ewyue\\source\\migration_poc\\legacy-src\\TestService\\TestService.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\ewyue\\.nuget\\packages\\system.configuration.configurationmanager\\6.0.0\\system.configuration.configurationmanager.6.0.0.nupkg.sha512",
+    "C:\\Users\\ewyue\\.nuget\\packages\\system.security.accesscontrol\\6.0.0\\system.security.accesscontrol.6.0.0.nupkg.sha512",
+    "C:\\Users\\ewyue\\.nuget\\packages\\system.security.permissions\\6.0.0\\system.security.permissions.6.0.0.nupkg.sha512",
+    "C:\\Users\\ewyue\\.nuget\\packages\\system.security.principal.windows\\5.0.0\\system.security.principal.windows.5.0.0.nupkg.sha512"
+  ],
+  "logs": []
+}
