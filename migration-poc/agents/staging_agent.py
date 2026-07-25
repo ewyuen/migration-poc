@@ -1,4 +1,4 @@
-"""Staging Agent: Copy components to legacy-code and create feature branches"""
+"""Staging Agent: Copy components to migrated-output and create feature branches"""
 import os
 import shutil
 import json
@@ -12,7 +12,7 @@ from typing import Dict, List, Tuple, Optional
 class StagingAgent:
     """Handles component copying and branch creation"""
 
-    def __init__(self, legacy_src_dir: str = "legacy-src", legacy_code_dir: str = "legacy-code"):
+    def __init__(self, legacy_src_dir: str = "legacy-src", legacy_code_dir: str = "../migrated-output"):
         self.legacy_src_dir = legacy_src_dir
         self.legacy_code_dir = legacy_code_dir
         self._ensure_directories()
@@ -67,7 +67,7 @@ class StagingAgent:
 
     def copy_component(self, component_name: str) -> Tuple[bool, str, Dict]:
         """
-        Copy component from legacy-src to legacy-code
+        Copy component from legacy-src to migrated-output
 
         Returns:
             Tuple of (success, error_message, file_manifest)
