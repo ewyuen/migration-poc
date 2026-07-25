@@ -1,0 +1,298 @@
+# Agent Configuration for Component Migration Workflow
+# Defines agent roles, responsibilities, tools, and orchestration flow
+
+version: "1.0"
+workflow_name: component-migration-pipeline
+
+# Global settings
+global:
+  legacy_src_dir: legacy-src
+  legacy_code_dir: legacy-code
+  output_dir: migration-poc/output
+  audit_dir: migration-poc/audit
+  target_framework: net10
+  allow_parallel: false  # Sequential execution for now
+
+# Orchestrator: Central coordinator
+orchestrator:
+  name: orchestrator
+  role: orchestrator
+  description: Coordinates the migration workflow and directs all delegate agents
+  entrypoint: migration-poc/orchestrator.py
+  tools:
+    - user_input_handler
+    - agent_director
+    - branch_manager
+    - state_manager
+    - error_handler
+    - workflow_logger
+  delegates:
+    - explorer
+    - staging_agent
+    - modernizer
+    - extractor
+    - bdd_generator
+    - test_writer
+    - verifier
+  workflow_sequence:
+    - discovery
+    - staging
+    - modernization
+    - extraction
+    - bdd_generation
+    - test_writing
+    - verification
+
+# Explorer: Discover and analyze legacy components
+explorer:
+  name: explorer
+  role: legacy_component_discovery
+  description: Scans legacy-src folder and identifies components for migration
+  entrypoint: migration-poc/agents/explorer.py
+  tools:
+    - code_scanner
+    - component_analyzer
+    - dependency_analyzer
+    - metadata_extractor
+  input:
+    type: component_name_or_pattern
+    optional_filters:
+      - domain
+      - dependency
+      - size
+  output:
+    artifact_type: component_inventory
+    format: json
+    location: "legacy-code/inventory.json"
+  validates:
+    - component_exists_in_legacy_src
+    - component_readiness
+    - dependency_compatibility
+
+# Staging Agent: Copy component and create branch
+staging_agent:
+  name: staging_agent
+  role: legacy_component_staging
+  description: Copies components to legacy-code and creates feature branches
+  entrypoint: migration-poc/agents/staging_agent.py
+  tools:
+    - branch_manager
+    - file_copier
+    - checksum_validator
+    - metadata_writer
+    - commit_manager
+  input:
+    artifact_type: component_inventory
+  output:
+    artifacts:
+      - component_copy
+      - feature_branch
+      - metadata_file
+    location: "legacy-code/{component}/"
+  validates:
+    - copy_completeness
+    - branch_creation
+    - file_integrity
+
+# Modernizer: Update code to .NET 10
+modernizer:
+  name: modernizer
+  role: code_modernization_dotnet10
+  description: Updates legacy code to .NET 10 standards and APIs
+  entrypoint: migration-poc/agents/modernizer.py
+  tools:
+    - code_transformer
+    - dotnet_api_mapper
+    - nuget_updater
+    - config_migrator
+    - compilation_validator
+  input:
+    artifact_type: staged_legacy_code
+    location: "legacy-code/{component}/"
+  output:
+    artifacts:
+      - modernized_code
+      - modernization_report
+    format: csproj, cs files
+    location: "legacy-code/{component}/{component}.modernized/"
+  validates:
+    - syntax_validity
+    - compilation_success
+    - api_compatibility
+
+# Extractor: Extract domain logic
+extractor:
+  name: extractor
+  role: domain_logic_extraction
+  description: Decomposes modernized code into business logic and algorithms
+  entrypoint: migration-poc/agents/extractor.py
+  tools:
+    - ast_analyzer
+    - pattern_matcher
+    - abstraction_generator
+    - dependency_mapper
+    - coverage_analyzer
+  input:
+    artifact_type: modernized_code
+    location: "legacy-code/{component}/{component}.modernized/"
+  output:
+    artifact_type: business_logic_specs
+    format: yaml, markdown
+    location: "legacy-code/{component}/{component}.extracted-logic.md"
+  validates:
+    - extraction_completeness
+    - logic_preservation
+
+# BDD Generator: Create Gherkin specifications
+bdd_generator:
+  name: bdd_generator
+  role: bdd_specification_generation
+  description: Creates Gherkin feature files from extracted domain logic
+  entrypoint: migration-poc/agents/bdd_test_agent.py
+  tools:
+    - scenario_generator
+    - gherkin_writer
+    - traceability_linker
+    - syntax_validator
+  input:
+    artifact_type: business_logic_specs
+    location: "legacy-code/{component}/{component}.extracted-logic.md"
+  output:
+    artifact_type: gherkin_specifications
+    format: feature files
+    location: "legacy-code/{component}/{component}.feature"
+  validates:
+    - gherkin_syntax
+    - scenario_completeness
+
+# Test Writer: Generate C# tests from Gherkin (NEW)
+test_writer:
+  name: test_writer
+  role: gherkin_test_implementation
+  description: Converts Gherkin specifications into executable C# test code
+  entrypoint: migration-poc/agents/test_writer.py
+  tools:
+    - gherkin_parser
+    - test_code_generator
+    - fixture_generator
+    - compilation_validator
+  input:
+    artifact_type: gherkin_specifications
+    location: "legacy-code/{component}/{component}.feature"
+  output:
+    artifacts:
+      - test_class
+      - test_fixtures
+      - helper_methods
+    format: csharp
+    location: "legacy-code/{component}/{component}.Tests.cs"
+  validates:
+    - code_compilation
+    - fixture_validity
+
+# Verifier: Run tests and verify migration
+verifier:
+  name: verifier
+  role: test_verification_execution
+  description: Executes tests and validates the migration success
+  entrypoint: migration-poc/agents/verifier.py
+  tools:
+    - test_compiler
+    - test_runner
+    - result_reporter
+    - coverage_analyzer
+  input:
+    artifact_type: executable_tests
+    location: "legacy-code/{component}/{component}.Tests.cs"
+  output:
+    artifacts:
+      - test_results
+      - coverage_report
+      - verification_report
+    format: json, markdown
+    location: "legacy-code/{component}/{component}.test-results.json"
+  validates:
+    - test_execution
+    - result_validity
+
+# Artifact formats and handoff expectations
+artifacts:
+  component_inventory:
+    description: JSON file listing discovered components with metadata
+    format: |
+      {
+        "components": [
+          {
+            "name": "ComponentName",
+            "path": "legacy-src/ComponentName",
+            "size_loc": 5000,
+            "dependencies": [],
+            "last_modified": "2026-07-24",
+            "readiness": "ready"
+          }
+        ],
+        "summary": "..."
+      }
+
+  modernized_code:
+    description: .NET 10 compatible code with updated APIs
+    format: csproj, cs files
+    includes:
+      - updated_target_framework
+      - replaced_apis
+      - updated_packages
+      - migration_report
+
+  business_logic_specs:
+    description: Extracted domain concepts and business rules
+    format: yaml, markdown
+    includes:
+      - domain_entities
+      - business_rules
+      - algorithms
+      - test_scenarios
+
+  gherkin_specifications:
+    description: BDD feature files with Given-When-Then scenarios
+    format: feature files
+    includes:
+      - feature_descriptions
+      - scenarios
+      - scenario_outlines
+      - examples
+
+  executable_tests:
+    description: C# xUnit test code generated from Gherkin
+    format: csharp
+    includes:
+      - test_classes
+      - test_methods
+      - fixtures
+      - helper_methods
+
+  test_results:
+    description: Test execution results with coverage analysis
+    format: json
+    includes:
+      - pass_fail_counts
+      - execution_times
+      - coverage_percentage
+      - failure_details
+      - recommendations
+
+# Error handling strategy
+error_handling:
+  on_agent_failure: halt_pipeline
+  validation_level: strict
+  recovery_strategy: rollback_to_branch
+  logging_detail: comprehensive
+
+# Logging configuration
+logging:
+  level: info
+  format: json
+  output:
+    audit_log: "migration-poc/audit/workflow.log"
+    error_log: "migration-poc/audit/errors.log"
+  include_metadata: true
+  persistence_location: "legacy-code/{component}/audit/"
