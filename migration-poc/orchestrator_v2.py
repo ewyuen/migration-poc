@@ -16,7 +16,8 @@ from agents.modernizer import modernize_code
 from agents.bdd_test_cases_generator import generate_bdd_tests
 from agents.test_writer import TestWriter
 from agents.test_writer_stage import TestWriterStage
-from agents.verifier import run_tests_and_collect_coverage
+from agents.test_orchestrator import TestOrchestrator
+from agents.verifier import verify_test_results
 from config import OUTPUT_DIR, TARGET_FRAMEWORK, COMPLIANCE_CONTEXT, DOMAIN
 
 
@@ -79,6 +80,7 @@ class OrchestratorV2:
         self.staging_agent = StagingAgent()
         self.test_writer = TestWriter()
         self.test_writer_stage = TestWriterStage(config=self.config.get("test_writer"))
+        self.test_orchestrator = TestOrchestrator(config=self.config.get("test_writer"))
         self.audit_dir = self.config.get("global", {}).get("audit_dir", "migration-poc/audit")
         Path(self.audit_dir).mkdir(parents=True, exist_ok=True)
 
@@ -327,29 +329,28 @@ class OrchestratorV2:
             self._save_output(request.component_name, os.path.join("tests", f"{request.component_name}.Tests.cs"), "")
         )
 
+        runner_report = {}
         if success:
             self._save_output(request.component_name, os.path.join("tests", f"{request.component_name}.Tests.cs"), test_code)
-            # Run TestWriterStage to implement the skeleton test methods with real code
-            print("🖋️ Running TestWriterStage to implement skeletons...")
-            writer_stage_result = self.test_writer_stage.execute(request.component_name)
-            if writer_stage_result["status"] == "success":
-                print("✅ TestWriterStage successfully completed and filled all skeletons!")
-                # Read the updated test code to save it in workflow state artifacts
-                test_file_path = os.path.join("migrated-output", request.component_name, "tests", f"{request.component_name}.Tests.cs")
-                if os.path.exists(test_file_path):
-                    with open(test_file_path, "r", encoding="utf-8") as f:
-                        test_code = f.read()
-            else:
-                print(f"⚠️ TestWriterStage completed with issues/errors: {writer_stage_result.get('errors', [])}")
+            # Run self-healing Test Orchestrator loop
+            print("🖋️ Running self-healing Test Orchestrator loop...")
+            runner_report = self.test_orchestrator.execute(request.component_name)
+            
+            # Read the final test code to save it in workflow state artifacts
+            test_file_path = os.path.join("migrated-output", request.component_name, "tests", f"{request.component_name}.Tests.cs")
+            if os.path.exists(test_file_path):
+                with open(test_file_path, "r", encoding="utf-8") as f:
+                    test_code = f.read()
 
         state.artifacts["bdd"] = bdd_tests
         state.artifacts["test_code"] = test_code if success else ""
+        state.artifacts["runner_report"] = runner_report
         state.mark_stage_complete()
 
         # STAGE 7: VERIFICATION (Compilation, Test Execution & Coverage)
         state.advance_stage("verification")
         try:
-            verification_results = run_tests_and_collect_coverage(request.component_name)
+            verification_results = verify_test_results(request.component_name, runner_report)
             state.artifacts["verification"] = verification_results
             if verification_results.get("status") == "PASS":
                 state.mark_stage_complete()
