@@ -3,6 +3,7 @@ import os
 import json
 import yaml
 import sys
+import re
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -283,9 +284,11 @@ class OrchestratorV2:
         state.artifacts["exploration"] = exploration_results
         state.mark_stage_complete()
 
-        # STAGE 4: MODERNIZATION
+        # STAGE 4: MODERNIZATION (with self-healing compilation verification)
         state.advance_stage("modernization")
         legacy_code_path = os.path.join("legacy-code", request.component_name)
+        output_src_dir = os.path.join("migrated-output", request.component_name, "src")
+        failure_log_dir = os.path.join("migrated-output", "result-log")
 
         # Read all .cs files from the component directory
         component_files = self._read_component_files(legacy_code_path)
@@ -294,18 +297,79 @@ class OrchestratorV2:
             self._log_workflow(state)
             return state.to_dict()
 
-        # Combine all file contents for analysis
-        combined_legacy_code = "\n".join(component_files.values())
+        # Find .csproj in legacy code (assumes one project per component)
+        csproj_path = None
+        csproj_name = None
+        for root, dirs, files in os.walk(legacy_code_path):
+            for file in files:
+                if file.endswith(".csproj"):
+                    csproj_path = os.path.join(root, file)
+                    csproj_name = file
+                    break
+            if csproj_path:
+                break
 
-        modernized_code = modernize_code(combined_legacy_code, exploration_results, exploration_results)
-        state.artifacts["modernization"] = modernized_code
+        if not csproj_path:
+            # Fallback if no .csproj found
+            csproj_name = f"{request.component_name}.csproj"
+            csproj_path = os.path.join(legacy_code_path, csproj_name)
 
-        # Extract and save modernized code with appropriate filenames
-        modernized_files = self._parse_modernized_files(modernized_code, component_files.keys())
-        for filename, content in modernized_files.items():
-            self._save_output(request.component_name, filename, content)
+        # Extract assembly and namespace info from .csproj (simplified)
+        assembly_name = request.component_name
+        root_namespace = request.component_name
 
-        state.mark_stage_complete()
+        try:
+            # Use self-healing agent for each .cs file
+            print(f"🔄 Modernizing {len(component_files)} file(s) with compilation verification...")
+            all_modernized_code = {}
+
+            for filename, legacy_code in component_files.items():
+                print(f"\n📝 Processing: {filename}")
+                modernized = modernize_code(
+                    legacy_code=legacy_code,
+                    domain_logic=exploration_results.get("domain_logic", ""),
+                    exploration=exploration_results,
+                    output_dir=output_src_dir,
+                    csproj_name=csproj_name,
+                    output_filename=filename,
+                    target_framework=self.config["global"].get("target_framework", "net10.0"),
+                    failure_log_dir=failure_log_dir
+                )
+                all_modernized_code[filename] = modernized
+                state.artifacts[f"modernization_{filename}"] = modernized
+
+            # Copy .csproj to output directory with updated target framework
+            if os.path.exists(csproj_path):
+                try:
+                    with open(csproj_path, "r", encoding="utf-8") as f:
+                        csproj_content = f.read()
+                    # Update target framework
+                    csproj_content = re.sub(
+                        r"<TargetFramework>[^<]*</TargetFramework>",
+                        f"<TargetFramework>{self.config['global'].get('target_framework', 'net10.0')}</TargetFramework>",
+                        csproj_content
+                    )
+                    output_csproj_path = os.path.join(output_src_dir, csproj_name)
+                    Path(os.path.dirname(output_csproj_path)).mkdir(parents=True, exist_ok=True)
+                    with open(output_csproj_path, "w", encoding="utf-8") as f:
+                        f.write(csproj_content)
+                    print(f"✅ Project file updated: {output_csproj_path}")
+                except Exception as e:
+                    print(f"⚠️  Failed to copy .csproj: {e}")
+
+            # Save modernized files with original names
+            for filename, content in all_modernized_code.items():
+                self._save_output(request.component_name, filename, content)
+
+            state.artifacts["modernization"] = all_modernized_code
+            state.mark_stage_complete()
+
+        except Exception as e:
+            error_msg = f"Modernization failed: {str(e)}"
+            state.mark_stage_failed(error_msg)
+            self._log_workflow(state)
+            print(f"❌ {error_msg}")
+            return state.to_dict()
 
         # STAGE 5: BDD & TEST WRITING
         state.advance_stage("bdd_and_testing")
