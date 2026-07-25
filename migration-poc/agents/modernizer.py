@@ -324,7 +324,12 @@ LEGACY CODE:
 Output ONLY the modernized C# code in a ```csharp block."""
 
         print(f"📝 Calling LLM for initial migration...")
-        response = llm_call_func(initial_prompt)
+        try:
+            response = llm_call_func(initial_prompt)
+            print(f"   ✅ LLM responded ({len(response)} chars)")
+        except Exception as llm_error:
+            print(f"   ❌ LLM call failed: {llm_error}")
+            raise
         current_code = self._extract_csharp_code(response)
 
         with open(output_filepath, "w", encoding="utf-8") as f:

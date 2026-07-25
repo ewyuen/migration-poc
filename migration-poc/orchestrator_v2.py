@@ -351,22 +351,33 @@ class OrchestratorV2:
         try:
             # Use self-healing agent for each .cs file
             print(f"🔄 Modernizing {len(component_files)} file(s) with compilation verification...")
+            print(f"   Output directory: {output_src_dir}")
+            print(f"   .csproj: {csproj_name}")
             all_modernized_code = {}
 
             for filename, legacy_code in component_files.items():
                 print(f"\n📝 Processing: {filename}")
-                modernized = modernize_code(
-                    legacy_code=legacy_code,
-                    domain_logic=exploration_results.get("domain_logic", ""),
-                    exploration=exploration_results,
-                    output_dir=output_src_dir,
-                    csproj_name=csproj_name,
-                    output_filename=filename,
-                    target_framework=self.config["global"].get("target_framework", "net10.0"),
-                    failure_log_dir=failure_log_dir
-                )
-                all_modernized_code[filename] = modernized
-                state.artifacts[f"modernization_{filename}"] = modernized
+                print(f"   Code size: {len(legacy_code)} bytes")
+                try:
+                    modernized = modernize_code(
+                        legacy_code=legacy_code,
+                        domain_logic=exploration_results.get("domain_logic", ""),
+                        exploration=exploration_results,
+                        output_dir=output_src_dir,
+                        csproj_name=csproj_name,
+                        output_filename=filename,
+                        target_framework=self.config["global"].get("target_framework", "net10.0"),
+                        failure_log_dir=failure_log_dir
+                    )
+                    all_modernized_code[filename] = modernized
+                    state.artifacts[f"modernization_{filename}"] = modernized
+                    print(f"   ✅ {filename} modernized ({len(modernized)} bytes)")
+                except Exception as file_error:
+                    print(f"\n   ❌ ERROR processing {filename}:")
+                    print(f"      {type(file_error).__name__}: {str(file_error)}")
+                    import traceback
+                    traceback.print_exc()
+                    raise
 
             # NOTE: Do NOT copy legacy .csproj - the modernizer generates its own clean one
             # during the first modernize_code() call above. The legacy .csproj would have
@@ -399,7 +410,10 @@ class OrchestratorV2:
             error_msg = f"Modernization failed: {str(e)}"
             state.mark_stage_failed(error_msg)
             self._log_workflow(state)
-            print(f"❌ {error_msg}")
+            print(f"\n❌ MODERNIZATION FAILED")
+            print(f"   Error: {error_msg}")
+            import traceback
+            traceback.print_exc()
             return state.to_dict()
 
         # STAGE 5: BDD & TEST WRITING
