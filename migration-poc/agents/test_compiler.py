@@ -1,4 +1,4 @@
-"""Test Runner Agent: Manages test project setup, compilation, and execution"""
+"""Test Compiler Agent: Creates and compiles test projects"""
 import os
 import subprocess
 from pathlib import Path
@@ -62,9 +62,9 @@ def generate_test_csproj(tests_dir: str, component_name: str = None) -> None:
     print(f"🛠️ Generated test project file: {csproj_path}")
     print(f"   References: {src_csproj_path}")
 
-def run_test_runner(component_name: str, base_output_dir: str = "migrated-output") -> Dict:
+def run_test_compiler(component_name: str, base_output_dir: str = "migrated-output") -> Dict:
     """
-    Compiles and executes the test project, collecting raw outputs.
+    Creates tests.csproj and compiles the test project, collecting raw outputs.
 
     Returns:
         Dict detailing build status, compilation errors, and directory paths.

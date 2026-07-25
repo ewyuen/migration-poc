@@ -4,7 +4,7 @@ import os
 import re
 from typing import Dict, List, Optional
 from .test_writer_stage import TestWriterStage
-from .test_runner import run_test_runner
+from .test_compiler import run_test_compiler
 
 class TestOrchestrator:
     """Coordinates the Test Writer and Test Runner in a self-healing loop"""
@@ -126,7 +126,7 @@ class TestOrchestrator:
 
             # 2. Run Test Runner
             self.logger.info(f"🏃 Test Orchestrator: Running Test Runner...")
-            runner_report = run_test_runner(component_name, self.base_output_dir)
+            runner_report = run_test_compiler(component_name, self.base_output_dir)
 
             if runner_report["compiled"]:
                 self.logger.info(f"✅ Test Orchestrator: Tests compiled cleanly on attempt {attempt}!")
@@ -149,7 +149,7 @@ class TestOrchestrator:
 
             # Try one final compile with commented-out tests
             self.logger.info(f"🏃 Test Orchestrator: Running final test compilation after commenting out failing tests...")
-            runner_report = run_test_runner(component_name, self.base_output_dir)
+            runner_report = run_test_compiler(component_name, self.base_output_dir)
             runner_report["attempts"] = self.max_attempts
             runner_report["commented_tests"] = commented_tests
             return runner_report
