@@ -237,12 +237,16 @@ class OrchestratorV2:
 
     def _save_output(self, component_name: str, filename: str, content: str) -> str:
         """Save output to migrated-output directory"""
-        # Determine if this is a source file or a log/report
-        is_source_file = filename.endswith(('.cs', '.feature', '.csproj'))
+        # Determine if this is a source file, test file, or log/report
+        is_source_file = filename.endswith(('.cs', '.csproj'))
+        is_feature_file = filename.endswith('.feature')
+        is_test_file = filename.endswith('.Tests.cs') or "/tests/" in filename.replace("\\", "/")
         is_log_file = filename.endswith(('.md', '.json'))
 
         if is_log_file:
             output_dir = os.path.join("migrated-output", "result-log")
+        elif is_test_file or is_feature_file:
+            output_dir = os.path.join("migrated-output", component_name, "tests")
         else:
             output_dir = os.path.join("migrated-output", component_name, "src")
 
@@ -418,7 +422,8 @@ class OrchestratorV2:
 
         # STAGE 5: BDD & TEST WRITING
         state.advance_stage("bdd_and_testing")
-        bdd_tests = generate_bdd_tests(exploration_results, modernized_code, exploration_results)
+        modernized_code_str = "\n\n".join(all_modernized_code.values())
+        bdd_tests = generate_bdd_tests(modernized_code_str, modernized_code_str, exploration_results)
         self._save_output(request.component_name, os.path.join("tests", "scenarios.feature"), bdd_tests)
 
         # Generate executable tests from Gherkin (NEW)
