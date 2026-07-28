@@ -98,7 +98,7 @@ class ReqnrollTestRunner:
                 "scenarios_passed": 0,
                 "scenarios_failed": 0,
                 "scenarios_pending": 0,
-                "step_failures": [str(e)],
+                "step_failures": [f"dotnet test failed to run: {str(e)}"],
                 "coverage": 0.0,
                 "raw_output": ""
             }

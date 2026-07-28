@@ -2,8 +2,6 @@
 
 - [x] 1.1 Update MigrationState TypedDict in orchestrator_v3.py with step_definitions_skeleton and step_definitions_enhanced fields
 - [x] 1.2 Add Reqnroll NuGet package to test .csproj template
-- [ ] 1.3 Create utility module for C# compilation (csc.exe invocation, error parsing)
-- [ ] 1.4 Create audit logging infrastructure for step definition generation errors
 
 ## 2. Step Definitions Skeleton Generation
 
@@ -66,20 +64,20 @@
 
 ## 8. Documentation and Cleanup
 
-- [ ] 8.1 Update SPECKIT_TEST_GENERATION.md to document new step definitions flow
-- [ ] 8.2 Create REQNROLL_MIGRATION.md with Reqnroll architecture and patterns
-- [ ] 8.3 Document LLM prompts and inference strategies
-- [ ] 8.4 Add logging/debug output to step definitions nodes
-- [ ] 8.5 Verify audit logging captures step definition generation status
-- [ ] 8.6 Review and update requirements.txt for Reqnroll dependency
-- [ ] 8.7 Test error messages for clarity and actionability
+- [x] 8.1 Update SPECKIT_TEST_GENERATION.md to document new step definitions flow
+- [x] 8.2 Create REQNROLL_MIGRATION.md with Reqnroll architecture and patterns
+- [x] 8.3 Document LLM prompts and inference strategies
+- [x] 8.4 Add logging/debug output to step definitions nodes
+- [x] 8.5 Verify audit logging captures step definition generation status
+- [x] 8.6 Review and update requirements.txt for Reqnroll dependency
+- [x] 8.7 Test error messages for clarity and actionability
 
 ## 9. Deployment and Rollout
 
 - [ ] 9.1 Create migration script (if needed) to handle existing test artifacts
 - [ ] 9.2 Test end-to-end orchestrator flow with new nodes (validate + stage + explore + modernize + bdd + step_defs_template + step_defs_enhance + verify)
-- [ ] 9.3 Verify backward compatibility (orchestrator entry point unchanged)
+- [x] 9.3 Verify backward compatibility (orchestrator entry point unchanged)
 - [ ] 9.4 Performance testing (measure LLM call time, compilation time, total pipeline time)
 - [ ] 9.5 Run full migration test on sample component
 - [ ] 9.6 Generate audit trail review (check orchestrator.jsonl for new stages)
-- [ ] 9.7 Document known issues and limitations
+- [x] 9.7 Document known issues and limitations
