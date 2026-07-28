@@ -70,7 +70,7 @@ class StepDefinitionsCompiler:
             self.logger.error(f"❌ Compiler: Unexpected error: {e}")
             return {
                 "success": False,
-                "errors": [f"Unexpected error: {str(e)}"],
+                "errors": [f"dotnet build failed to run: {str(e)}"],
                 "raw_output": ""
             }
 
