@@ -673,7 +673,11 @@ class OrchestratorV3:
         """Save output to migrated-output directory"""
         is_source_file = filename.endswith(('.cs', '.csproj'))
         is_feature_file = filename.endswith('.feature')
-        is_test_file = filename.endswith('.Tests.cs') or "/tests/" in filename.replace("\\", "/")
+        is_test_file = (
+            filename.endswith('.Tests.cs') or
+            filename.startswith('StepDefinitions') or
+            "/tests/" in filename.replace("\\", "/")
+        )
 
         if is_test_file or is_feature_file:
             output_dir = os.path.join("migrated-output", run_id, "tests")
