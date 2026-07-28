@@ -48,6 +48,8 @@ class MigrationState(TypedDict):
     modernized_code: Optional[Dict[str, str]]
     bdd_tests: Optional[str]
     test_code: Optional[str]
+    step_definitions_skeleton: Optional[str]
+    step_definitions_enhanced: Optional[str]
     verification_results: Optional[Dict[str, Any]]
 
 
@@ -148,14 +150,16 @@ class OrchestratorV3:
             return trace.get_tracer(__name__)
 
     def _build_graph(self) -> StateGraph:
-        """Build LangGraph StateGraph with 6 nodes and conditional edges"""
+        """Build LangGraph StateGraph with 8 nodes (refactored BDD + new step definitions nodes)"""
         builder = StateGraph(MigrationState)
 
         builder.add_node("validate", self._node_validate)
         builder.add_node("stage", self._node_stage)
         builder.add_node("explore", self._node_explore)
         builder.add_node("modernize", self._node_modernize)
-        builder.add_node("bdd_and_test", self._node_bdd_and_test)
+        builder.add_node("bdd_tests", self._node_bdd_tests)
+        builder.add_node("step_defs_template", self._node_step_defs_template)
+        builder.add_node("step_defs_enhance", self._node_step_defs_enhance)
         builder.add_node("verify", self._node_verify)
 
         builder.add_edge(START, "validate")
@@ -177,10 +181,20 @@ class OrchestratorV3:
 
         builder.add_conditional_edges(
             "modernize",
-            lambda state: "bdd_and_test" if not state.get("error") else "verify",
+            lambda state: "bdd_tests" if not state.get("error") else "verify",
         )
 
-        builder.add_edge("bdd_and_test", "verify")
+        builder.add_conditional_edges(
+            "bdd_tests",
+            lambda state: "step_defs_template" if not state.get("error") else "verify",
+        )
+
+        builder.add_conditional_edges(
+            "step_defs_template",
+            lambda state: "step_defs_enhance" if not state.get("error") else "verify",
+        )
+
+        builder.add_edge("step_defs_enhance", "verify")
         builder.add_edge("verify", END)
 
         return builder.compile()
@@ -385,26 +399,24 @@ class OrchestratorV3:
         finally:
             span.end()
 
-    def _node_bdd_and_test(self, state: MigrationState) -> MigrationState:
-        """Generate BDD tests and test code (Stage 5).
+    def _node_bdd_tests(self, state: MigrationState) -> MigrationState:
+        """Generate BDD test scenarios (Gherkin only) (Stage 5).
 
         Calls generate_bdd_tests() to create Gherkin scenarios from modernized code.
-        Then calls TestWriter to generate C# test stubs, and TestOrchestrator to
-        fill and self-heal test methods.
+        Old test code generation removed; step definitions now handled by separate nodes.
 
-        Skips if prior error. Creates OTel span. Stores both scenarios.feature
-        and compiled test code.
+        Skips if prior error. Creates OTel span.
 
         Args:
             state: MigrationState with modernized_code
 
         Returns:
-            MigrationState with bdd_tests (Gherkin) and test_code (C# implementation)
+            MigrationState with bdd_tests (Gherkin feature content)
         """
-        span = self.tracer.start_span("node_bdd_and_test")
+        span = self.tracer.start_span("node_bdd_tests")
         try:
-            span.set_attribute("stage_name", "bdd_and_test")
-            print(f"\n{'='*70}\n[STAGE 5/6] BDD & TESTING\n{'='*70}\n")
+            span.set_attribute("stage_name", "bdd_tests")
+            print(f"\n{'='*70}\n[STAGE 5/8] BDD TEST GENERATION\n{'='*70}\n")
 
             if state.get("error"):
                 span.set_attribute("status", "skipped")
@@ -414,33 +426,121 @@ class OrchestratorV3:
             bdd_tests = generate_bdd_tests(modernized_code_str, modernized_code_str, state["exploration_results"])
             self._save_output(state["run_id"], "scenarios.feature", bdd_tests)
 
-            success, error, test_code = self.test_writer.write_tests_from_gherkin(
-                bdd_tests,
-                state["request"].component_name,
-                self._save_output(state["run_id"], f"{state['request'].component_name}.Tests.cs", "")
-            )
-
-            if success:
-                self._save_output(state["run_id"], f"{state['request'].component_name}.Tests.cs", test_code)
-                orchestrator_result = self.test_orchestrator.execute(state["request"].component_name, state["run_id"])
-
-                test_file_path = os.path.join("migrated-output", state["run_id"], "tests", f"{state['request'].component_name}.Tests.cs")
-                if os.path.exists(test_file_path):
-                    with open(test_file_path, "r", encoding="utf-8") as f:
-                        test_code = f.read()
-
-                state["test_code"] = test_code
-                state["stage"] = "bdd_and_test"
-                span.set_attribute("status", "success")
-            else:
-                state["test_code"] = ""
-                state["stage"] = "bdd_and_test_failed"
-                span.set_attribute("status", "failed")
-
+            state["bdd_tests"] = bdd_tests
+            state["stage"] = "bdd_tests"
+            span.set_attribute("status", "success")
             return state
+
         except Exception as e:
             state["error"] = str(e)
-            state["stage"] = "bdd_and_test_failed"
+            state["stage"] = "bdd_tests_failed"
+            span.set_attribute("status", "error")
+            span.record_exception(e)
+            return state
+        finally:
+            span.end()
+
+    def _node_step_defs_template(self, state: MigrationState) -> MigrationState:
+        """Generate step definitions skeleton (Stage 6).
+
+        Extracts steps from Gherkin and generates StepDefinitions.cs skeleton
+        with [Binding] class, method stubs, and TODO placeholders.
+
+        Skips if prior error. Creates OTel span.
+
+        Args:
+            state: MigrationState with bdd_tests (Gherkin content)
+
+        Returns:
+            MigrationState with step_definitions_skeleton
+        """
+        from agents.step_definitions_generator import StepDefinitionSkeletonGenerator
+
+        span = self.tracer.start_span("node_step_defs_template")
+        try:
+            span.set_attribute("stage_name", "step_defs_template")
+            print(f"\n{'='*70}\n[STAGE 6/8] STEP DEFINITIONS TEMPLATE\n{'='*70}\n")
+
+            if state.get("error"):
+                span.set_attribute("status", "skipped")
+                return state
+
+            generator = StepDefinitionSkeletonGenerator(state["request"].component_name)
+            skeleton = generator.generate_skeleton(state["bdd_tests"])
+            self._save_output(state["run_id"], "StepDefinitions.cs", skeleton)
+
+            state["step_definitions_skeleton"] = skeleton
+            state["stage"] = "step_defs_template"
+            span.set_attribute("status", "success")
+            return state
+
+        except Exception as e:
+            state["error"] = str(e)
+            state["stage"] = "step_defs_template_failed"
+            span.set_attribute("status", "error")
+            span.record_exception(e)
+            return state
+        finally:
+            span.end()
+
+    def _node_step_defs_enhance(self, state: MigrationState) -> MigrationState:
+        """Enhance step definitions with LLM (Stage 7).
+
+        Uses LLM to fill TODO implementations in step definitions skeleton.
+        Validates via dotnet build. On compilation failure, logs to audit and continues
+        (graceful degradation; Reqnroll runner provides diagnostics).
+
+        Skips if prior error. Creates OTel span with compile_success attribute.
+
+        Args:
+            state: MigrationState with step_definitions_skeleton, modernized_code
+
+        Returns:
+            MigrationState with step_definitions_enhanced
+        """
+        from agents.step_definitions_enhancer import StepDefinitionEnhancer
+        from agents.step_definitions_compiler import StepDefinitionsCompiler
+
+        span = self.tracer.start_span("node_step_defs_enhance")
+        try:
+            span.set_attribute("stage_name", "step_defs_enhance")
+            print(f"\n{'='*70}\n[STAGE 7/8] STEP DEFINITIONS ENHANCEMENT\n{'='*70}\n")
+
+            if state.get("error"):
+                span.set_attribute("status", "skipped")
+                return state
+
+            # LLM enhancement
+            enhancer = StepDefinitionEnhancer()
+            enhanced = enhancer.enhance(
+                state["step_definitions_skeleton"],
+                state["bdd_tests"],
+                state["modernized_code"],
+                state["exploration_results"]
+            )
+            self._save_output(state["run_id"], "StepDefinitions.cs", enhanced)
+
+            # Single compilation check
+            compiler = StepDefinitionsCompiler()
+            compile_result = compiler.compile(state["request"].component_name, state["run_id"])
+            compiler.save_to_audit(compile_result, state["run_id"], self.audit_dir)
+
+            state["step_definitions_enhanced"] = enhanced
+            state["stage"] = "step_defs_enhance"
+            span.set_attribute("compile_success", compile_result["success"])
+
+            if compile_result["success"]:
+                span.set_attribute("status", "success")
+            else:
+                # Graceful failure: log but continue to verification
+                span.set_attribute("status", "completed_with_errors")
+                print(f"⚠️  Step definitions compilation had errors; continuing to verification...")
+
+            return state
+
+        except Exception as e:
+            state["error"] = str(e)
+            state["stage"] = "step_defs_enhance_failed"
             span.set_attribute("status", "error")
             span.record_exception(e)
             return state
@@ -448,7 +548,7 @@ class OrchestratorV3:
             span.end()
 
     def _node_verify(self, state: MigrationState) -> MigrationState:
-        """Verify compilation and run tests (Stage 6).
+        """Verify compilation and run tests (Stage 8).
 
         Calls run_tests_and_collect_coverage() to compile modernized code,
         execute tests, and collect coverage metrics.
@@ -468,12 +568,13 @@ class OrchestratorV3:
         span = self.tracer.start_span("node_verify")
         try:
             span.set_attribute("stage_name", "verify")
-            print(f"\n{'='*70}\n[STAGE 6/6] VERIFICATION\n{'='*70}\n")
+            print(f"\n{'='*70}\n[STAGE 8/8] VERIFICATION\n{'='*70}\n")
 
             if state.get("run_id"):
                 verification_results = run_tests_and_collect_coverage(
                     state["request"].component_name,
                     state["run_id"],
+                    step_definitions_enhanced=state.get("step_definitions_enhanced")
                 )
                 state["verification_results"] = verification_results
                 span.set_attribute("status", "success")
