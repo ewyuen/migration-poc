@@ -3,6 +3,38 @@ import re
 from llm_client import call_llm
 
 
+def _validate_gherkin_syntax(content: str) -> str:
+    """Validate and fix invalid Gherkin keywords in step lines"""
+    lines = content.split('\n')
+    fixed_lines = []
+
+    # Invalid keywords that LLM sometimes uses instead of Given/When/Then/And/But
+    invalid_keywords = {
+        'Without': 'And',
+        'While': 'And',
+        'However': 'And',
+        'Therefore': 'Then',
+        'If': 'And',
+        'Unless': 'And',
+        'Also': 'And',
+        'Furthermore': 'And',
+    }
+
+    for line in lines:
+        stripped = line.lstrip()
+        # Check if line starts with an invalid keyword
+        for invalid, replacement in invalid_keywords.items():
+            if stripped.startswith(invalid + ' '):
+                # Replace invalid keyword with valid one
+                indent = line[:len(line) - len(stripped)]
+                rest = stripped[len(invalid):].lstrip()
+                line = f"{indent}{replacement} {rest}"
+                break
+        fixed_lines.append(line)
+
+    return '\n'.join(fixed_lines)
+
+
 def _strip_markdown_blocks(content: str) -> str:
     """Remove markdown code block syntax and trailing prose from Gherkin content"""
     # Remove ```gherkin...``` or ```feature...``` blocks
@@ -66,6 +98,13 @@ MODERNIZED SERVICE:
 {modernized_code}
 ```
 
+STRICT GHERKIN SYNTAX RULES:
+- ONLY use these step keywords: Given, When, Then, And, But, Background, Scenario, Scenario Outline, Examples, Feature
+- NEVER use: Without, While, If, Unless, However, Therefore, or any other prose-like keywords
+- Each step MUST start with Given/When/Then/And/But
+- Multi-line steps use proper indentation and line continuation (not new keywords)
+- Tables use | Field | Value | syntax with proper alignment
+
 Generate a .feature file that tests:
 1. Happy path: Valid data recorded successfully
 2. Validation failures: Each business rule enforcement
@@ -76,7 +115,9 @@ Generate a .feature file that tests:
 Include:
 - Feature description
 - Scenario outline for parameterized tests
-- Clear Given/When/Then steps
+- Clear Given/When/Then steps with AND/BUT for continuation
+
+CRITICAL: Only use valid Gherkin keywords. Never add prose explanations as new step lines.
 
 Output format:
 ```gherkin
@@ -103,13 +144,20 @@ Feature: Medical Observation Recording
 ```
 """
 
-    system = """You are a BDD/QA expert specializing in medical software.
-Write clear, testable Gherkin scenarios.
-Cover compliance (21 CFR Part 11) concerns.
-Make scenarios specific to the domain."""
+    system = """You are a Gherkin/BDD expert specializing in medical software.
+
+CRITICAL RULES:
+1. Write ONLY valid Gherkin syntax - Given, When, Then, And, But keywords ONLY
+2. Never use prose words like Without, While, However, Therefore as step starters
+3. Each line must be a proper step or table row
+4. Multi-line concepts use And/But continuation, never new keywords
+5. Generate valid, parseable feature files
+
+Cover compliance (21 CFR Part 11) concerns. Make scenarios specific to the domain."""
 
     print(f"📝 BDD Agent: Generating test scenarios...")
     result = call_llm(prompt, system, max_tokens=2500)
     result = _strip_markdown_blocks(result)
+    result = _validate_gherkin_syntax(result)
     print(f"✅ BDD Agent: Test scenarios generated")
     return result
