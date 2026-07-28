@@ -161,6 +161,7 @@ class StepDefinitionSkeletonGenerator:
 using Xunit;
 using System;
 using System.Collections.Generic;
+using Microsoft.Extensions.Configuration;
 using {source_namespace};
 
 namespace {tests_namespace}
