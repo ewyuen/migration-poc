@@ -5,7 +5,11 @@ import glob
 import xml.etree.ElementTree as ET
 from pathlib import Path
 import json
+import logging
 from llm_client import call_llm_json
+from .reqnroll_test_runner import ReqnrollTestRunner
+
+logger = logging.getLogger(__name__)
 
 # Retain existing LLM-based verification for backward compatibility
 def verify_modernization(
@@ -130,9 +134,10 @@ def run_tests_and_collect_coverage(
     base_output_dir: str = "migrated-output",
     commented_tests: list = None,
     commented_classes: list = None,
+    step_definitions_enhanced: str = None,
 ) -> dict:
     """
-    Compile, execute unit tests, and collect code coverage.
+    Compile, execute unit tests (traditional + Reqnroll BDD), and collect code coverage.
 
     Args:
         component_name: Name of the migrated service
@@ -141,6 +146,7 @@ def run_tests_and_collect_coverage(
         commented_tests: Test methods Stage 5 commented out after exhausting its self-healing
             retries (surfaced here so the final report shows what couldn't be made to compile)
         commented_classes: Helper classes (fixtures/fakes) Stage 5 commented out for the same reason
+        step_definitions_enhanced: Optional StepDefinitions.cs content (Reqnroll BDD tests)
 
     Returns:
         Dictionary verification report
@@ -162,6 +168,11 @@ def run_tests_and_collect_coverage(
         "errors": [],
         "commented_tests": commented_tests or [],
         "commented_classes": commented_classes or [],
+        "step_definitions_available": step_definitions_enhanced is not None,
+        "reqnroll_scenarios": 0,
+        "reqnroll_scenarios_passed": 0,
+        "reqnroll_scenarios_failed": 0,
+        "step_failures": [],
     }
     
     if not os.path.exists(tests_dir):
@@ -221,13 +232,35 @@ def run_tests_and_collect_coverage(
                     build_errors.append(line.strip())
             report["errors"] = build_errors or [result.stdout[:2000]]
             print("❌ Compilation or project build failed.")
-            
+
     except subprocess.TimeoutExpired:
         report["errors"].append("dotnet test execution timed out after 180 seconds.")
         print("❌ dotnet test execution timed out.")
     except Exception as e:
         report["errors"].append(f"Unexpected error running tests: {str(e)}")
         print(f"❌ Unexpected error: {e}")
+
+    # Run Reqnroll BDD tests if step definitions are available
+    if step_definitions_enhanced:
+        print(f"\n🎭 Running Reqnroll BDD tests...")
+        try:
+            reqnroll_runner = ReqnrollTestRunner(base_output_dir)
+            reqnroll_results = reqnroll_runner.run_tests(component_name, run_id)
+
+            report["reqnroll_scenarios"] = reqnroll_results["scenarios_run"]
+            report["reqnroll_scenarios_passed"] = reqnroll_results["scenarios_passed"]
+            report["reqnroll_scenarios_failed"] = reqnroll_results["scenarios_failed"]
+            report["step_failures"] = reqnroll_results["step_failures"]
+
+            # Update overall status if BDD tests failed
+            if not reqnroll_results["success"]:
+                report["status"] = "FAIL"
+                print(f"⚠️  Some BDD scenarios failed")
+            else:
+                print(f"✅ All {reqnroll_results['scenarios_run']} BDD scenarios passed")
+        except Exception as e:
+            report["step_failures"].append(f"Reqnroll test execution error: {str(e)}")
+            print(f"⚠️  Reqnroll execution error: {e}")
 
     # 3. Generate Reports
     _write_reports(component_name, run_id, report)
