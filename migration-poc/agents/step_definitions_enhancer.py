@@ -85,9 +85,13 @@ class LLMContextBundleBuilder:
 
         formatted = []
         for filename, content in code_dict.items():
-            # Limit to first 2000 chars per file to avoid token bloat
-            truncated = content[:2000]
-            if len(content) > 2000:
+            # Truncating too aggressively silently hides real methods from the LLM,
+            # causing it to hallucinate mock implementations instead of calling the
+            # actual API (e.g. GenerateSessionToken() cut off -> LLM invents "mock-token").
+            # 12000 chars comfortably covers typical single-service migration files.
+            limit = 12000
+            truncated = content[:limit]
+            if len(content) > limit:
                 truncated += "\n// ... (truncated)"
             formatted.append(f"// {filename}\n{truncated}")
 
@@ -143,13 +147,24 @@ COMPLIANCE CONCERNS:
 {context['compliance_rules']}
 
 INSTRUCTIONS:
+0. The skeleton above contains EVERY [Given]/[When]/[Then] method that must exist in your output — count
+   them. Your output must contain the SAME NUMBER of bound methods, one per skeleton method, even if two
+   methods look similar or redundant. Do NOT drop, merge, or silently omit any of them.
 1. Replace each // TODO with actual C# code
 2. Use ScenarioContext["key"] to share state between steps
-3. Call actual methods from the modernized code (only methods shown above)
+3. Call ONLY methods/properties/fields that are EXPLICITLY defined in the modernized code shown above.
+   NEVER invent a method, property, or public accessor that isn't there — this is the #1 cause of compile
+   failures. Do not assume a getter exists for a private field. Do not guess at a method name because it
+   "should" exist (e.g. do not call GetConnectionString() on the service unless that exact method is shown
+   in MODERNIZED SERVICE CODE above).
 4. Infer semantic key names for ScenarioContext (e.g., "CurrentUser", "AuthResult")
 5. If a service is not shown in the code, generate a simple mock class
 6. Keep implementations simple and testable
 7. Never change method signatures or [Given/When/Then] attributes
+8. If a Gherkin step needs to verify something that has NO corresponding public method/property in the
+   modernized code (e.g. an internal/private field with no accessor), do NOT invent an API to reach it.
+   Instead write the weakest assertion that is still true and compiles — e.g. assert construction succeeded
+   without throwing, or assert on a value already exposed elsewhere — rather than calling a nonexistent member.
 
 IMPORTANT: Return ONLY the complete, compilable StepDefinitions.cs file. No markdown, no explanations."""
 

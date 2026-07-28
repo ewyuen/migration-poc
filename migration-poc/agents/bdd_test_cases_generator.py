@@ -106,10 +106,10 @@ STRICT GHERKIN SYNTAX RULES:
 - Tables use | Field | Value | syntax with proper alignment
 
 CRITICAL PARAMETER RULES FOR GHERKIN:
-- STEP TEXT: Never, EVER use {} parameter syntax in steps (no {bool}, {string}, {int}, etc.)
+- STEP TEXT: Never, EVER use {{}} parameter syntax in steps (no {{bool}}, {{string}}, {{int}}, etc.)
 - STEPS SHOULD BE: "Then the result is true" OR "Then the result is false" (specific values)
 - SCENARIO OUTLINES: Use <placeholder> syntax ONLY in the Examples table header
-- Example WRONG: "Then the result should be {bool}" ← THIS IS INVALID GHERKIN
+- Example WRONG: "Then the result should be {{bool}}" ← THIS IS INVALID GHERKIN
 - Example RIGHT: "Then the result should be <result>" with Examples: | result | true |
 - Boolean values: pass as strings in Examples table ("true" or "false")
 

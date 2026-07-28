@@ -15,66 +15,166 @@ class GherkinStepExtractor:
         """
         Extract all Given/When/Then steps from Gherkin content.
 
-        Returns list of dicts: {keyword, text, line_number}
+        Tracks the effective step type per scenario block so that And/But steps
+        inherit the type of the preceding Given/When/Then (as Reqnroll does at
+        runtime), instead of defaulting everything to Given.
+
+        Returns list of dicts: {keyword, text, line_number, normalized_keyword, examples}
         """
         steps = []
         lines = gherkin_content.split('\n')
 
+        last_primary = None
+        examples_header: Optional[List[str]] = None
+        examples_rows: List[Dict[str, str]] = []
+        in_examples = False
+        block_steps: List[Dict] = []
+
+        def flush_block():
+            # Backfill all Examples rows (only known once we've reached the
+            # Examples: table, which appears after the steps in source order).
+            # All rows (not just the first) are kept so type inference can
+            # account for a column mixing quoted/bare/numeric values.
+            for s in block_steps:
+                s['examples_rows'] = list(examples_rows)
+            steps.extend(block_steps)
+
         for i, line in enumerate(lines, 1):
             stripped = line.strip()
-            # Match Given, When, Then, And, But keywords
+
+            # Reset step-type tracking at the start of each scenario block
+            if stripped.startswith(('Scenario:', 'Scenario Outline:', 'Background:')):
+                flush_block()
+                block_steps = []
+                last_primary = None
+                examples_rows = []
+                examples_header = None
+                in_examples = False
+                continue
+
+            if stripped.startswith('Examples:'):
+                in_examples = True
+                examples_header = None
+                continue
+
+            if in_examples and stripped.startswith('|'):
+                cells = [c.strip() for c in stripped.strip('|').split('|')]
+                if examples_header is None:
+                    examples_header = cells
+                else:
+                    examples_rows.append(dict(zip(examples_header, cells)))
+                continue
+
+            # A table attached directly to a step (not under Examples:) is a
+            # Gherkin DataTable. Reqnroll passes it as a `Table` argument to the
+            # bound method, so the preceding step needs an extra parameter.
+            if stripped.startswith('|') and block_steps:
+                block_steps[-1]['has_table'] = True
+                continue
+
             match = re.match(r'^(Given|When|Then|And|But)\s+(.+)$', stripped)
             if match:
                 keyword = match.group(1)
                 text = match.group(2)
-                steps.append({
+
+                if keyword in ('Given', 'When', 'Then'):
+                    last_primary = keyword
+                    normalized = keyword
+                else:
+                    # And/But inherit the effective type of the preceding primary step
+                    normalized = last_primary or 'Given'
+
+                block_steps.append({
                     'keyword': keyword,
                     'text': text,
                     'line_number': i,
-                    'normalized_keyword': self._normalize_keyword(keyword)
+                    'normalized_keyword': normalized,
+                    'examples_rows': [],
+                    'has_table': False,
                 })
 
+        flush_block()
         return steps
-
-    def _normalize_keyword(self, keyword: str) -> str:
-        """Normalize And/But to Given/When/Then based on context"""
-        # Simplified: just map to Given for now; full implementation would track state
-        if keyword in ('And', 'But'):
-            return 'Given'  # Conservative default
-        return keyword
 
 
 class ParameterTypeInferencer:
     """Infer Cucumber Expression types from step text"""
 
-    def infer_types(self, step_text: str) -> List[Tuple[str, str]]:
+    def infer_params(self, step_text: str, examples_rows: Optional[List[Dict[str, str]]] = None) -> List[Tuple[str, str, int]]:
         """
-        Infer parameter types from step text.
+        Infer parameters from step text, in left-to-right order of appearance.
 
-        Returns list of (param_name, param_type) tuples.
-        Types: 'string', 'int', 'float'
+        Handles three token kinds:
+        - Quoted strings -> {string}
+        - Scenario Outline placeholders <name> -> type inferred from ALL Examples rows
+          for that column (falls back to {word} if values mix quoted/bare/non-numeric
+          forms, since {word} matches any non-whitespace token and {string} only
+          matches text with literal surrounding quotes)
+        - Bare numbers -> {int} / {float}
+
+        Returns list of (param_name, param_type, start_pos) tuples, sorted by position.
         """
+        examples_rows = examples_rows or []
         params = []
 
-        # Find quoted strings -> {string}
-        quoted_pattern = r'"([^"]*)"'
-        for match in re.finditer(quoted_pattern, step_text):
-            param_name = self._sanitize_param_name(match.group(1))
-            if param_name:
-                params.append((param_name, 'string'))
+        for match in re.finditer(r'"([^"]*)"', step_text):
+            name = self._sanitize_param_name(match.group(1)) or f"value{match.start()}"
+            params.append((name, 'string', match.start()))
 
-        # Find whole numbers -> {int}
-        int_pattern = r'\b(\d+)\b'
-        for match in re.finditer(int_pattern, step_text):
-            # Avoid duplicates with string parameters
-            if not any(str(match.group(0)) in p[0] for p in params):
-                params.append((f"value{len(params)}", 'int'))
+        for match in re.finditer(r'<(\w+)>', step_text):
+            placeholder_name = match.group(1)
+            column_values = [row[placeholder_name] for row in examples_rows if placeholder_name in row]
+            param_type = self._infer_column_type(column_values)
+            params.append((self._sanitize_param_name(placeholder_name), param_type, match.start()))
 
+        for match in re.finditer(r'\b\d+(?:\.\d+)?\b', step_text):
+            # Skip numbers that are inside quotes or placeholders already captured
+            if any(start <= match.start() < start + len(str(name)) + 2 for name, _, start in params):
+                continue
+            param_type = 'float' if '.' in match.group(0) else 'int'
+            params.append((f"value{len(params)}", param_type, match.start()))
+
+        params.sort(key=lambda p: p[2])
         return params
+
+    def _infer_column_type(self, values: List[str]) -> str:
+        """
+        Infer a Cucumber Expression type that safely matches every sample value
+        in an Examples-table column.
+
+        - All values quoted (e.g. "admin@test.com") -> string
+        - All values integers -> int
+        - All values integers/decimals -> float
+        - Anything else (bare words like null/true/false, or a mix of quoted
+          and bare values) -> word, since {word} matches any non-whitespace
+          token while {string} requires literal surrounding quotes and would
+          fail to match unquoted values.
+        """
+        if not values:
+            return 'string'
+
+        kinds = set()
+        for raw in values:
+            value = raw.strip()
+            if len(value) >= 2 and value.startswith('"') and value.endswith('"'):
+                kinds.add('quoted')
+            elif re.fullmatch(r'-?\d+', value):
+                kinds.add('int')
+            elif re.fullmatch(r'-?\d+\.\d+', value):
+                kinds.add('float')
+            else:
+                kinds.add('bare')
+
+        if kinds <= {'int'}:
+            return 'int'
+        if kinds <= {'int', 'float'}:
+            return 'float'
+        if kinds <= {'quoted'}:
+            return 'string'
+        return 'word'
 
     def _sanitize_param_name(self, text: str) -> str:
         """Convert step text fragment to valid C# parameter name"""
-        # Remove special chars, convert to camelCase
         sanitized = re.sub(r'[^a-zA-Z0-9]', '', text)
         if not sanitized:
             return ''
@@ -94,29 +194,41 @@ class StepDefinitionSkeletonGenerator:
         """Generate StepDefinitions.cs skeleton from Gherkin"""
         steps = self.extractor.extract_steps(gherkin_content)
 
-        # Build method stubs
+        # Dedupe identical (normalized_keyword, text) pairs across scenarios so we
+        # don't emit the same binding method multiple times
+        seen = set()
         method_stubs = []
         for step in steps:
-            method = self._generate_step_method(step)
-            method_stubs.append(method)
+            dedupe_key = (step['normalized_keyword'], step['text'])
+            if dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
+            method_stubs.append(self._generate_step_method(step))
 
-        # Build complete file
         skeleton = self._build_file(method_stubs)
         return skeleton
+
+    # Cucumber Expression parameter type -> C# CLR type for method signatures.
+    # {word} matches any non-whitespace token but resolves to a string value.
+    CUCUMBER_TYPE_TO_CSHARP = {'string': 'string', 'int': 'int', 'float': 'float', 'word': 'string'}
 
     def _generate_step_method(self, step: Dict) -> str:
         """Generate a single step definition method with Cucumber Expression"""
         keyword = step['normalized_keyword']
         text = step['text']
+        examples_rows = step.get('examples_rows', [])
 
-        # Infer parameters
-        params = self.inferencer.infer_types(text)
+        params = self.inferencer.infer_params(text, examples_rows)
 
-        # Build Cucumber Expression (replace quoted strings and numbers with {type})
         cucumber_expr = self._build_cucumber_expression(text, params)
 
-        # Build C# method signature
-        param_list = ', '.join(f"{ptype} {pname}" for pname, ptype in params)
+        param_parts = [
+            f"{self.CUCUMBER_TYPE_TO_CSHARP.get(ptype, 'string')} {pname}" for pname, ptype, _ in params
+        ]
+        if step.get('has_table'):
+            # Reqnroll passes an attached Gherkin DataTable as a final Table argument
+            param_parts.append('Table table')
+        param_list = ', '.join(param_parts)
         method_name = self._to_method_name(keyword, text)
 
         attr_mapping = {'Given': 'Given', 'When': 'When', 'Then': 'Then'}
@@ -130,21 +242,33 @@ class StepDefinitionSkeletonGenerator:
     }}'''
         return method
 
-    def _build_cucumber_expression(self, text: str, params: List[Tuple[str, str]]) -> str:
+    def _build_cucumber_expression(self, text: str, params: List[Tuple[str, str, int]]) -> str:
         """Convert step text to Cucumber Expression with {type} placeholders"""
         result = text
 
         # Replace quoted strings with {string}
         result = re.sub(r'"([^"]*)"', '{string}', result)
 
-        # Replace numbers with {int}
+        # Replace Scenario Outline placeholders <name> with their inferred type
+        param_types_by_name = {}
+        for pname, ptype, _ in params:
+            param_types_by_name.setdefault(pname, ptype)
+
+        def _replace_placeholder(match: 're.Match') -> str:
+            placeholder_name = match.group(1)
+            sanitized = re.sub(r'[^a-zA-Z0-9]', '', placeholder_name)
+            sanitized = (sanitized[0].lower() + sanitized[1:]) if sanitized else ''
+            ptype = param_types_by_name.get(sanitized, 'string')
+            return '{' + ptype + '}'
+
+        result = re.sub(r'<(\w+)>', _replace_placeholder, result)
+
+        # Replace bare numbers with {int} or {float}
+        result = re.sub(r'\b\d+\.\d+\b', '{float}', result)
         result = re.sub(r'\b\d+\b', '{int}', result)
 
         # Fix invalid Cucumber Expression types that LLM might generate
-        # {bool} is not a valid type - replace with {string} for scenario outlines
         result = re.sub(r'\{bool\}', '{string}', result, flags=re.IGNORECASE)
-
-        # Replace other invalid types with {string} as fallback
         invalid_types = [r'\{boolean\}', r'\{date\}', r'\{datetime\}', r'\{uuid\}']
         for invalid_type in invalid_types:
             result = re.sub(invalid_type, '{string}', result, flags=re.IGNORECASE)
@@ -153,7 +277,6 @@ class StepDefinitionSkeletonGenerator:
 
     def _to_method_name(self, keyword: str, text: str) -> str:
         """Convert step text to valid C# method name"""
-        # Remove non-alphanumeric, split on spaces
         words = re.sub(r'[^a-zA-Z0-9\s]', '', text).split()
         words = [w.capitalize() for w in words if w]
 
@@ -162,7 +285,6 @@ class StepDefinitionSkeletonGenerator:
 
     def _build_file(self, method_stubs: List[str]) -> str:
         """Build complete StepDefinitions.cs file"""
-        # Use component name for namespaces
         tests_namespace = f"{self.component_name}.Tests"
         source_namespace = self.component_name
 

@@ -708,15 +708,23 @@ class OrchestratorV3:
         else:
             output_dir = os.path.join("migrated-output", run_id, "src")
 
-        Path(output_dir).mkdir(parents=True, exist_ok=True)
+        try:
+            Path(output_dir).mkdir(parents=True, exist_ok=True)
 
-        filepath = os.path.join(output_dir, filename)
-        Path(os.path.dirname(filepath)).mkdir(parents=True, exist_ok=True)
-        with open(filepath, "w", encoding="utf-8") as f:
-            f.write(content)
+            filepath = os.path.join(output_dir, filename)
+            Path(os.path.dirname(filepath)).mkdir(parents=True, exist_ok=True)
+            with open(filepath, "w", encoding="utf-8") as f:
+                f.write(content)
 
-        print(f"💾 Saved: {filepath}")
-        return filepath
+            print(f"💾 Saved: {filepath}")
+            import sys
+            sys.stdout.flush()
+            return filepath
+        except Exception as e:
+            print(f"❌ Failed to save {filename}: {e}")
+            import sys
+            sys.stdout.flush()
+            raise
 
     def _log_workflow(self, state: MigrationState, final_status: str) -> None:
         """Log workflow execution to audit trail"""
