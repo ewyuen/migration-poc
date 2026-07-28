@@ -5,6 +5,15 @@ from typing import Dict, Optional, Any
 from llm_client import call_llm
 
 
+def _strip_markdown_blocks(content: str) -> str:
+    """Remove markdown code block syntax from content"""
+    # Remove ```csharp...``` or ```cs...``` blocks
+    content = re.sub(r'```\s*(csharp|cs|c#)\s*\n', '', content)
+    content = re.sub(r'\n```\s*$', '', content)
+    content = re.sub(r'\n```\s*\n', '\n', content)
+    return content.strip()
+
+
 class LLMContextBundleBuilder:
     """Build context bundle for LLM enhancement"""
 
@@ -67,6 +76,7 @@ class StepDefinitionEnhancer:
 
         self.logger.info("🧠 LLM Enhancer: Filling step definitions...")
         enhanced = call_llm(prompt, system, max_tokens=4000)
+        enhanced = _strip_markdown_blocks(enhanced)
         self.logger.info("✅ LLM Enhancer: Step definitions enhanced")
 
         return enhanced

@@ -1,5 +1,15 @@
 """BDD Test Agent: Generate Gherkin test scenarios"""
+import re
 from llm_client import call_llm
+
+
+def _strip_markdown_blocks(content: str) -> str:
+    """Remove markdown code block syntax from content"""
+    # Remove ```gherkin...``` or ```feature...``` blocks
+    content = re.sub(r'```\s*(gherkin|feature)\s*\n', '', content)
+    content = re.sub(r'\n```\s*$', '', content)
+    content = re.sub(r'\n```\s*\n', '\n', content)
+    return content.strip()
 
 
 def generate_bdd_tests(domain_logic: str, modernized_code: str, exploration: dict) -> str:
@@ -7,7 +17,7 @@ def generate_bdd_tests(domain_logic: str, modernized_code: str, exploration: dic
     Generate Gherkin BDD test scenarios.
 
     Returns:
-        Gherkin feature file content
+        Gherkin feature file content (plain text, no markdown blocks)
     """
     prompt = f"""
 Write comprehensive Gherkin BDD test scenarios for this medical domain logic.
@@ -66,5 +76,6 @@ Make scenarios specific to the domain."""
 
     print(f"📝 BDD Agent: Generating test scenarios...")
     result = call_llm(prompt, system, max_tokens=2500)
+    result = _strip_markdown_blocks(result)
     print(f"✅ BDD Agent: Test scenarios generated")
     return result
