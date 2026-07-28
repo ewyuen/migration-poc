@@ -623,7 +623,7 @@ class OrchestratorV3:
         if not is_valid:
             return False, error
 
-        component_path = os.path.join("legacy-src", request.component_name)
+        component_path = os.path.join(self.input_handler.legacy_src_dir, request.component_name)
         if not os.path.exists(component_path):
             return False, f"Component not found: {component_path}"
 
