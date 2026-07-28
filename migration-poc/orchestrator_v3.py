@@ -88,9 +88,10 @@ class OrchestratorV3:
         self.config_path = config_path
         self.config = self._load_config()
 
-        # Get paths from config
-        legacy_src_dir = self.config.get("global", {}).get("legacy_src_dir", "legacy-src")
-        audit_dir = self.config.get("global", {}).get("audit_dir", "migration-poc/audit")
+        # Resolve paths relative to config file location
+        config_dir = os.path.dirname(os.path.abspath(self.config_path))
+        legacy_src_dir = os.path.join(config_dir, self.config.get("global", {}).get("legacy_src_dir", "legacy-src"))
+        audit_dir = os.path.join(config_dir, self.config.get("global", {}).get("audit_dir", "migration-poc/audit"))
 
         self.input_handler = InputHandler(legacy_src_dir=legacy_src_dir, audit_dir=audit_dir)
         self.staging_agent = StagingAgent()
