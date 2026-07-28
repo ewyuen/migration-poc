@@ -105,12 +105,13 @@ STRICT GHERKIN SYNTAX RULES:
 - Multi-line steps use proper indentation and line continuation (not new keywords)
 - Tables use | Field | Value | syntax with proper alignment
 
-PARAMETER TYPES IN SCENARIO OUTLINES:
-- VALID parameter types in Scenario Outline Examples: string, integer, decimal, boolean
-- For Cucumber Expressions in step definitions: ONLY use {string}, {int}, {float}, {double}
-- Boolean values must be passed as strings in Examples: | result | true | or | result | false |
-- DO NOT use {bool}, {boolean}, or any other unsupported types
-- NEVER put parameter types like {bool} directly in step text
+CRITICAL PARAMETER RULES FOR GHERKIN:
+- STEP TEXT: Never, EVER use {} parameter syntax in steps (no {bool}, {string}, {int}, etc.)
+- STEPS SHOULD BE: "Then the result is true" OR "Then the result is false" (specific values)
+- SCENARIO OUTLINES: Use <placeholder> syntax ONLY in the Examples table header
+- Example WRONG: "Then the result should be {bool}" ← THIS IS INVALID GHERKIN
+- Example RIGHT: "Then the result should be <result>" with Examples: | result | true |
+- Boolean values: pass as strings in Examples table ("true" or "false")
 
 Generate a .feature file that tests:
 1. Happy path: Valid data recorded successfully
