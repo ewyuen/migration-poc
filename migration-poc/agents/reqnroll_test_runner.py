@@ -127,6 +127,23 @@ class ReqnrollTestRunner:
             if pending_match:
                 scenarios["pending"] = int(pending_match.group(1))
 
+            return scenarios
+
+        # Fallback: Reqnroll's xunit/NUnit adapter reports its own scenario summary only
+        # in verbose modes. The default `dotnet test` console output instead ends with
+        # the VSTest trailer, e.g.:
+        #   "Passed!  - Failed:     0, Passed:     1, Skipped:     0, Total:     1"
+        # Each Reqnroll scenario maps to exactly one test case here, so these counts
+        # are equivalent to scenario counts.
+        trailer_pattern = r'Failed:\s*(\d+),\s*Passed:\s*(\d+),\s*Skipped:\s*(\d+),\s*Total:\s*(\d+)'
+        trailer_match = re.search(trailer_pattern, output)
+        if trailer_match:
+            failed, passed, skipped, total = (int(g) for g in trailer_match.groups())
+            scenarios["run"] = total
+            scenarios["passed"] = passed
+            scenarios["failed"] = failed
+            scenarios["pending"] = skipped
+
         return scenarios
 
     def _parse_step_failures(self, output: str) -> List[str]:
