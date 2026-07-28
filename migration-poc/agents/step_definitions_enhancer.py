@@ -6,12 +6,54 @@ from llm_client import call_llm
 
 
 def _strip_markdown_blocks(content: str) -> str:
-    """Remove markdown code block syntax from content"""
+    """Remove markdown code block syntax and trailing prose from C# content"""
     # Remove ```csharp...``` or ```cs...``` blocks
     content = re.sub(r'```\s*(csharp|cs|c#)\s*\n', '', content)
     content = re.sub(r'\n```\s*$', '', content)
     content = re.sub(r'\n```\s*\n', '\n', content)
-    return content.strip()
+
+    lines = content.split('\n')
+
+    # Find start of C# code (namespace or using)
+    code_start_idx = -1
+    for i, line in enumerate(lines):
+        if line.strip().startswith(('using ', 'namespace ')):
+            code_start_idx = i
+            break
+
+    if code_start_idx > 0:
+        lines = lines[code_start_idx:]
+    elif code_start_idx == -1:
+        # No namespace found, look for class definition
+        for i, line in enumerate(lines):
+            if '[' in line and ('Binding' in line or 'Given' in line or 'When' in line or 'Then' in line):
+                code_start_idx = i
+                break
+        if code_start_idx > 0:
+            lines = lines[code_start_idx:]
+
+    # Find last valid C# line and truncate after it
+    # Valid C#: ends with closing brace, method, property, attribute, using, namespace
+    last_valid_idx = -1
+    brace_depth = 0
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped:
+            brace_depth += stripped.count('{') - stripped.count('}')
+            # Keep lines that are code (have braces, keywords, or are indented)
+            if (stripped.endswith(('{', '}', ';')) or
+                stripped.startswith(('using ', 'namespace ', 'public ', 'private ', '[',
+                                   'class ', 'void ', 'string ', 'int ', 'bool ', 'return')) or
+                '{' in line or '}' in line):
+                last_valid_idx = i
+        elif brace_depth > 0:
+            # Empty line inside code block
+            last_valid_idx = i
+
+    if last_valid_idx >= 0:
+        lines = lines[:last_valid_idx + 1]
+
+    return '\n'.join(lines).strip()
 
 
 class LLMContextBundleBuilder:

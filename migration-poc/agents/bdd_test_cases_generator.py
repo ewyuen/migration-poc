@@ -4,12 +4,46 @@ from llm_client import call_llm
 
 
 def _strip_markdown_blocks(content: str) -> str:
-    """Remove markdown code block syntax from content"""
+    """Remove markdown code block syntax and trailing prose from Gherkin content"""
     # Remove ```gherkin...``` or ```feature...``` blocks
     content = re.sub(r'```\s*(gherkin|feature)\s*\n', '', content)
     content = re.sub(r'\n```\s*$', '', content)
     content = re.sub(r'\n```\s*\n', '\n', content)
-    return content.strip()
+
+    lines = content.split('\n')
+
+    # Remove leading prose before Feature: keyword
+    feature_idx = -1
+    for i, line in enumerate(lines):
+        if line.strip().startswith('Feature:'):
+            feature_idx = i
+            break
+
+    if feature_idx > 0:
+        lines = lines[feature_idx:]
+
+    # Find last valid Gherkin line and truncate after it
+    # Valid Gherkin: keywords, table rows, comments, empty lines, or indented continuations
+    last_valid_idx = -1
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        is_gherkin = (
+            stripped.startswith(('Feature:', 'Background:', 'Scenario:', 'Scenario Outline:',
+                                'Given ', 'When ', 'Then ', 'And ', 'But ', 'Examples:',
+                                '|', '@', '#', '"""')) or
+            stripped == '' or
+            line.startswith((' ', '\t'))  # Indented lines (table cells, continuations)
+        )
+        if is_gherkin:
+            last_valid_idx = i
+        elif last_valid_idx >= 0 and stripped and not stripped.startswith(('Examples:', '|')):
+            # Found non-Gherkin prose after valid content
+            break
+
+    if last_valid_idx >= 0:
+        lines = lines[:last_valid_idx + 1]
+
+    return '\n'.join(lines).strip()
 
 
 def generate_bdd_tests(domain_logic: str, modernized_code: str, exploration: dict) -> str:
