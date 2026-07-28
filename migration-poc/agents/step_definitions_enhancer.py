@@ -76,19 +76,13 @@ class StepDefinitionEnhancer:
         return f"""Fill in the TODO implementations in the step definitions file below.
 
 SKELETON (with TODO placeholders):
-```csharp
 {context['skeleton']}
-```
 
 GHERKIN SPECIFICATION (business intent):
-```gherkin
 {context['gherkin']}
-```
 
 MODERNIZED SERVICE CODE (available to call):
-```csharp
 {context['modernized_code']}
-```
 
 DOMAIN RULES:
 {context['domain_logic']}

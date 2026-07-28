@@ -488,7 +488,15 @@ class OrchestratorV3:
 
         Uses LLM to fill TODO implementations in step definitions skeleton.
         Validates via dotnet build. On compilation failure, logs to audit and continues
-        (graceful degradation; Reqnroll runner provides diagnostics).
+        (graceful degradation; Reqnroll runner provides better step-binding diagnostics).
+
+        DESIGN DECISION - Single-Pass Enhancement (No Heal Loop):
+        - LLM sees full modernized code context, makes informed decisions on first pass
+        - Compilation errors are structural (missing types), not fixable by LLM retries
+        - Reqnroll test runner provides superior diagnostics for step-binding issues
+        - Simpler, faster, fewer LLM tokens than multi-retry approach
+        - If step definitions have issues, Reqnroll runner reports "step not implemented"
+          or binding errors clearly, guiding manual fixes
 
         Skips if prior error. Creates OTel span with compile_success attribute.
 
