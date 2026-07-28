@@ -53,14 +53,13 @@
 
 ## 7. Testing and Validation
 
-- [ ] 7.1 Write unit tests for skeleton generation (Gherkin parsing, template rendering)
-- [ ] 7.2 Write unit tests for parameter type inference
-- [ ] 7.3 Write unit tests for error parser (compiler error extraction)
-- [ ] 7.4 Write integration test: Gherkin → skeleton → enhancement → compilation (end-to-end single feature)
-- [ ] 7.5 Write integration test: error case, heal loop retries and succeeds
-- [ ] 7.6 Write integration test: max retries exhausted, graceful failure
-- [ ] 7.7 Test with real modernized code sample (create test fixture)
-- [ ] 7.8 Test Reqnroll test runner integration (execute generated StepDefinitions with .feature)
+- [x] 7.1 Write unit tests for skeleton generation (Gherkin parsing, template rendering)
+- [x] 7.2 Write unit tests for parameter type inference
+- [x] 7.3 Write unit tests for error parser (compiler error extraction)
+- [x] 7.4 Write integration test: Gherkin → skeleton → enhancement → compilation (end-to-end single feature)
+- [x] 7.5/7.6 Write integration test: compile failure is logged and pipeline continues gracefully, including a node-level test that `_node_step_defs_enhance` does not set `state["error"]` on compile failure (no heal loop; see design.md decision 4 — the original "heal loop retries" wording predates that decision)
+- [x] 7.7 Test with real modernized code sample (create test fixture)
+- [x] 7.8 Test Reqnroll test runner integration (execute generated StepDefinitions with .feature)
 
 ## 8. Documentation and Cleanup
 
