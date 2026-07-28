@@ -19,6 +19,7 @@ from agents.bdd_test_cases_generator import generate_bdd_tests
 from agents.test_writer import TestWriter
 from agents.test_writer_stage import TestWriterStage
 from agents.test_orchestrator import TestOrchestrator
+from agents.test_compiler import generate_test_csproj
 from agents.verifier import run_tests_and_collect_coverage
 from config import OUTPUT_DIR, TARGET_FRAMEWORK, COMPLIANCE_CONTEXT, DOMAIN
 
@@ -465,6 +466,11 @@ class OrchestratorV3:
                 span.set_attribute("status", "skipped")
                 return state
 
+            # Generate test project file (references source project from Stage 4)
+            tests_dir = os.path.join("migrated-output", state["run_id"], "tests")
+            generate_test_csproj(tests_dir, state["request"].component_name)
+
+            # Generate step definitions skeleton
             generator = StepDefinitionSkeletonGenerator(state["request"].component_name)
             skeleton = generator.generate_skeleton(state["bdd_tests"])
             # Store skeleton in state (not persisted to disk; used only for LLM enhancement)
