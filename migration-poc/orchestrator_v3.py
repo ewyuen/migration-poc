@@ -467,7 +467,7 @@ class OrchestratorV3:
 
             generator = StepDefinitionSkeletonGenerator(state["request"].component_name)
             skeleton = generator.generate_skeleton(state["bdd_tests"])
-            self._save_output(state["run_id"], "StepDefinitions.cs", skeleton)
+            self._save_output(state["run_id"], "StepDefinitions.Skeleton.cs", skeleton)
 
             state["step_definitions_skeleton"] = skeleton
             state["stage"] = "step_defs_template"
