@@ -140,6 +140,15 @@ class StepDefinitionSkeletonGenerator:
         # Replace numbers with {int}
         result = re.sub(r'\b\d+\b', '{int}', result)
 
+        # Fix invalid Cucumber Expression types that LLM might generate
+        # {bool} is not a valid type - replace with {string} for scenario outlines
+        result = re.sub(r'\{bool\}', '{string}', result, flags=re.IGNORECASE)
+
+        # Replace other invalid types with {string} as fallback
+        invalid_types = [r'\{boolean\}', r'\{date\}', r'\{datetime\}', r'\{uuid\}']
+        for invalid_type in invalid_types:
+            result = re.sub(invalid_type, '{string}', result, flags=re.IGNORECASE)
+
         return result
 
     def _to_method_name(self, keyword: str, text: str) -> str:
