@@ -468,6 +468,7 @@ class OrchestratorV3:
 
             # Generate test project file (references source project from Stage 4)
             tests_dir = os.path.join("migrated-output", state["run_id"], "tests")
+            Path(tests_dir).mkdir(parents=True, exist_ok=True)
             generate_test_csproj(tests_dir, state["request"].component_name)
 
             # Generate step definitions skeleton
@@ -480,10 +481,14 @@ class OrchestratorV3:
             return state
 
         except Exception as e:
-            state["error"] = str(e)
+            error_msg = str(e)
+            state["error"] = error_msg
             state["stage"] = "step_defs_template_failed"
             span.set_attribute("status", "error")
             span.record_exception(e)
+            print(f"❌ Step Definitions Template Error: {error_msg}")
+            import traceback
+            traceback.print_exc()
             return state
         finally:
             span.end()
