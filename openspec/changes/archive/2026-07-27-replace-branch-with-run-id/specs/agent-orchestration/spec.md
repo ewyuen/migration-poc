@@ -1,17 +1,5 @@
 ## ADDED Requirements
 
-### Requirement: Orchestrator receives migration requests from user
-
-The orchestrator SHALL accept structured migration requests specifying a component name to migrate and optional filters for identifying related components.
-
-#### Scenario: User requests migration of single component
-- **WHEN** user provides component name (e.g., "LegacyAuthService")
-- **THEN** orchestrator logs the request and initiates the discovery phase
-
-#### Scenario: User requests migration with related component filters
-- **WHEN** user specifies component name and filters (e.g., domain="Authentication", dependency="SqlClient")
-- **THEN** orchestrator passes both component name and filters to the explorer agent
-
 ### Requirement: Orchestrator generates and propagates a run_id for migration
 
 The orchestrator SHALL obtain a `run_id` from the staging agent for each migration and use it, rather than the bare component name, to resolve `legacy-code/` and `migrated-output/` paths for every subsequent stage.
@@ -28,6 +16,8 @@ The orchestrator SHALL obtain a `run_id` from the staging agent for each migrati
 - **WHEN** orchestrator derives assembly name, root namespace, or .csproj filename during modernization
 - **THEN** these are derived from the original component_name, never from run_id
 
+## MODIFIED Requirements
+
 ### Requirement: Orchestrator directs agents in correct sequence
 
 The orchestrator SHALL manage the workflow progression: discovery → staging → modernization → extraction → BDD → test writing → verification. No subsequent stage begins until the prior stage completes successfully.
@@ -40,26 +30,8 @@ The orchestrator SHALL manage the workflow progression: discovery → staging �
 - **WHEN** modernizer agent reports failure (e.g., compilation error)
 - **THEN** orchestrator halts the pipeline and reports the error without invoking subsequent agents
 
-### Requirement: Orchestrator validates prerequisites before delegating
+## REMOVED Requirements
 
-The orchestrator SHALL check that prior stage outputs exist and are valid before invoking the next agent.
-
-#### Scenario: Explorer output validation before modernization
-- **WHEN** orchestrator prepares to invoke modernizer
-- **THEN** orchestrator verifies that explorer's component inventory exists and contains the target component
-
-#### Scenario: Modernizer output validation before extraction
-- **WHEN** orchestrator prepares to invoke extractor
-- **THEN** orchestrator verifies that modernized code is syntactically valid .NET 10
-
-### Requirement: Orchestrator logs workflow progress
-
-The orchestrator SHALL record each stage's start, completion, and any errors in an audit trail.
-
-#### Scenario: Audit trail records stage transitions
-- **WHEN** each agent completes its work
-- **THEN** orchestrator logs timestamp, agent name, status (success/failure), and output artifact path
-
-#### Scenario: Workflow failure is logged with context
-- **WHEN** an agent fails
-- **THEN** orchestrator logs the failure reason, input that caused it, and which stage failed
+### Requirement: Orchestrator creates and manages git branches
+**Reason**: Isolation is now provided by run_id-scoped directories rather than git branches, removing the side effect of mutating the user's currently checked-out branch and eliminating the confusing collision-suffix naming behavior. See `legacy-component-staging`'s removed "Staging agent creates feature branch for migration" requirement.
+**Migration**: Workflows that relied on a per-migration feature branch remaining available for review/merge should instead use the run_id-scoped directories under `legacy-code/` and `migrated-output/`, identified via `.staging_metadata.json`.

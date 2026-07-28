@@ -23,10 +23,10 @@ class TestOrchestrator:
         self.max_attempts = self.config.get("max_attempts", 4)
         self.reader = SkeletonReader()
 
-    def _test_file_path(self, component_name: str) -> str:
-        return os.path.join(self.base_output_dir, component_name, "tests", f"{component_name}.Tests.cs")
+    def _test_file_path(self, component_name: str, run_id: str) -> str:
+        return os.path.join(self.base_output_dir, run_id, "tests", f"{component_name}.Tests.cs")
 
-    def _map_errors(self, component_name: str, errors: List[str]) -> Tuple[Dict[str, List[str]], Dict[str, List[str]], List[str]]:
+    def _map_errors(self, component_name: str, run_id: str, errors: List[str]) -> Tuple[Dict[str, List[str]], Dict[str, List[str]], List[str]]:
         """
         Parse compiler errors and locate each one to the test method or helper class it falls
         inside, using the file that actually produced them (the current on-disk test file).
@@ -39,7 +39,7 @@ class TestOrchestrator:
         class_errors: Dict[str, List[str]] = {}
         unresolvable: List[str] = []
 
-        test_file_path = self._test_file_path(component_name)
+        test_file_path = self._test_file_path(component_name, run_id)
         if not os.path.exists(test_file_path):
             return method_errors, class_errors, list(errors)
 
@@ -75,7 +75,7 @@ class TestOrchestrator:
 
         return method_errors, class_errors, unresolvable
 
-    def _comment_out_blocks(self, component_name: str, method_names: List[str], class_names: List[str]) -> Tuple[List[str], List[str]]:
+    def _comment_out_blocks(self, component_name: str, run_id: str, method_names: List[str], class_names: List[str]) -> Tuple[List[str], List[str]]:
         """
         Comment out the named test methods and/or helper classes by splicing /* ... */ around
         their exact source ranges (from SkeletonReader). Never comments out the primary test
@@ -84,7 +84,7 @@ class TestOrchestrator:
         if not method_names and not class_names:
             return [], []
 
-        test_file_path = self._test_file_path(component_name)
+        test_file_path = self._test_file_path(component_name, run_id)
         if not os.path.exists(test_file_path):
             self.logger.warning(f"Test file not found: {test_file_path}")
             return [], []
@@ -135,7 +135,7 @@ class TestOrchestrator:
         self.logger.info(f"✏️ Commented out {len(commented_methods)} test method(s) and {len(commented_classes)} class(es) in {test_file_path}")
         return commented_methods, commented_classes
 
-    def execute(self, component_name: str) -> Dict:
+    def execute(self, component_name: str, run_id: str) -> Dict:
         """
         Executes the self-healing loop: Write -> Compile -> Check -> Repeat.
         Every attempt composes the test file fresh from the pristine skeleton (never from a
@@ -151,7 +151,7 @@ class TestOrchestrator:
 
         writer_stage = TestWriterStage(self.base_output_dir, self.config)
 
-        test_file_path = self._test_file_path(component_name)
+        test_file_path = self._test_file_path(component_name, run_id)
         skeleton_content = None
         if os.path.exists(test_file_path):
             with open(test_file_path, "r", encoding="utf-8") as f:
@@ -162,7 +162,7 @@ class TestOrchestrator:
 
             # 1. Run Test Writer Stage, composing fresh from the pristine skeleton every time
             self.logger.info(f"✍️ Test Orchestrator: Invoking Test Writer Stage...")
-            writer_result = writer_stage.execute(component_name, skeleton_content=skeleton_content, feedback_errors=errors_by_method)
+            writer_result = writer_stage.execute(component_name, run_id, skeleton_content=skeleton_content, feedback_errors=errors_by_method)
 
             if writer_result["status"] == "failed":
                 self.logger.error("❌ Test Writer failed to implement test skeleton. Aborting loop.")
@@ -179,7 +179,7 @@ class TestOrchestrator:
 
             # 2. Run Test Compiler
             self.logger.info(f"🏃 Test Orchestrator: Running Test Compiler...")
-            runner_report = run_test_compiler(component_name, self.base_output_dir)
+            runner_report = run_test_compiler(component_name, run_id, self.base_output_dir)
 
             if runner_report["compiled"]:
                 self.logger.info(f"✅ Test Orchestrator: Tests compiled cleanly on attempt {attempt}!")
@@ -191,7 +191,7 @@ class TestOrchestrator:
 
             # Scope compiler errors to the specific method that produced them for the next attempt
             errors = runner_report["errors"]
-            errors_by_method, _, _ = self._map_errors(component_name, errors)
+            errors_by_method, _, _ = self._map_errors(component_name, run_id, errors)
             self.logger.warning(f"⚠️ Test Orchestrator: Compilation failed on attempt {attempt}. Compile errors parsed.")
             attempt += 1
 
@@ -207,9 +207,9 @@ class TestOrchestrator:
         unresolvable: List[str] = []
 
         for cleanup_pass in range(1, self.max_attempts + 1):
-            method_errors, class_errors, unresolvable = self._map_errors(component_name, errors)
+            method_errors, class_errors, unresolvable = self._map_errors(component_name, run_id, errors)
             newly_commented_tests, newly_commented_classes = self._comment_out_blocks(
-                component_name, list(method_errors.keys()), list(class_errors.keys())
+                component_name, run_id, list(method_errors.keys()), list(class_errors.keys())
             )
 
             if not newly_commented_tests and not newly_commented_classes:
@@ -219,7 +219,7 @@ class TestOrchestrator:
             all_commented_classes.extend(newly_commented_classes)
 
             self.logger.info(f"🏃 Test Orchestrator: Running test compilation after cleanup pass {cleanup_pass}...")
-            runner_report = run_test_compiler(component_name, self.base_output_dir)
+            runner_report = run_test_compiler(component_name, run_id, self.base_output_dir)
 
             if runner_report["compiled"]:
                 unresolvable = []

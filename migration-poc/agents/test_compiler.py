@@ -58,17 +58,22 @@ def generate_test_csproj(tests_dir: str, component_name: str = None) -> None:
     print(f"🛠️ Generated test project file: {csproj_path}")
     print(f"   References: {src_csproj_path}")
 
-def run_test_compiler(component_name: str, base_output_dir: str = "migrated-output") -> Dict:
+def run_test_compiler(component_name: str, run_id: str, base_output_dir: str = "migrated-output") -> Dict:
     """
     Stage 5 only: Creates tests.csproj and verifies the test project compiles.
 
     Does NOT run tests (that is Stage 6's responsibility).
     Uses 'dotnet build' to verify syntax and dependencies are correct.
 
+    Args:
+        component_name: Name of the migrated service (used only for the generated
+            .csproj's ProjectReference filename, never for paths)
+        run_id: Per-run identifier used to locate this run's output directory
+
     Returns:
         Dict with compiled: bool, errors: list, tests_dir: str
     """
-    tests_dir = os.path.join(base_output_dir, component_name, "tests")
+    tests_dir = os.path.join(base_output_dir, run_id, "tests")
     report = {
         "compiled": False,
         "errors": [],

@@ -16,6 +16,8 @@ The staging agent SHALL generate a unique `run_id` for each migration run instea
 - **WHEN** staging agent generates a run_id and copies the component
 - **THEN** the user's currently checked-out git branch is unchanged, and no new git branch or commit is created
 
+## MODIFIED Requirements
+
 ### Requirement: Staging agent copies component from legacy-src to legacy-code
 
 The staging agent SHALL move the identified component(s) to a run_id-scoped subdirectory of the legacy-code directory.
@@ -32,18 +34,6 @@ The staging agent SHALL move the identified component(s) to a run_id-scoped subd
 - **WHEN** original component contains shell scripts or special files
 - **THEN** staging agent preserves executable permissions and file encoding
 
-### Requirement: Staging agent validates copy completeness
-
-The staging agent SHALL verify that all files were copied successfully without data loss.
-
-#### Scenario: Validation confirms file count matches
-- **WHEN** copy completes
-- **THEN** staging agent verifies: file count in legacy-code equals file count in legacy-src
-
-#### Scenario: Validation confirms no corruption
-- **WHEN** copy completes
-- **THEN** staging agent computes and compares checksums of original and copied files
-
 ### Requirement: Staging agent records staging metadata
 
 The staging agent SHALL create a metadata file documenting the staging operation.
@@ -55,3 +45,13 @@ The staging agent SHALL create a metadata file documenting the staging operation
 #### Scenario: Metadata includes staging status
 - **WHEN** staging completes
 - **THEN** metadata marks status as "ready_for_modernization"
+
+## REMOVED Requirements
+
+### Requirement: Staging agent creates feature branch for migration
+**Reason**: Git branch creation mutated the user's currently checked-out branch and produced inconsistently-named branches when a collision suffix was appended. Replaced by run_id-scoped directories, which require no git branch at all.
+**Migration**: Any tooling or workflow that relied on a per-migration git branch (e.g. `{component}-migration-{YYYYMMDD}`) should instead locate the run's files at `legacy-code/<run_id>` and `migrated-output/<run_id>`, using the `run_id` recorded in `.staging_metadata.json`.
+
+### Requirement: Staging agent commits initial copy to feature branch
+**Reason**: With no feature branch, a commit would land directly on the user's actively checked-out branch instead of an isolated one, turning every migration run into a permanent commit in the user's real history. `.staging_metadata.json` already records provenance (source path, timestamp, manifest with checksums) without requiring a git commit.
+**Migration**: Consumers that inspected the initial-copy commit should instead read `.staging_metadata.json` in the staged component's run directory for the same provenance information.
