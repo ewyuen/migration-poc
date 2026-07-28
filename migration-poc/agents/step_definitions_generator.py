@@ -153,13 +153,17 @@ class StepDefinitionSkeletonGenerator:
 
     def _build_file(self, method_stubs: List[str]) -> str:
         """Build complete StepDefinitions.cs file"""
-        namespace = f"MyService.Migration.Tests"
+        # Use component name for namespaces
+        tests_namespace = f"{self.component_name}.Tests"
+        source_namespace = self.component_name
 
         file_content = f'''using Reqnroll;
+using Xunit;
+using System;
 using System.Collections.Generic;
-using MyService.Core;
+using {source_namespace};
 
-namespace {namespace}
+namespace {tests_namespace}
 {{
     [Binding]
     public class StepDefinitions
