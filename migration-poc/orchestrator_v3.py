@@ -87,12 +87,17 @@ class OrchestratorV3:
 
         self.config_path = config_path
         self.config = self._load_config()
-        self.input_handler = InputHandler()
+
+        # Get paths from config
+        legacy_src_dir = self.config.get("global", {}).get("legacy_src_dir", "legacy-src")
+        audit_dir = self.config.get("global", {}).get("audit_dir", "migration-poc/audit")
+
+        self.input_handler = InputHandler(legacy_src_dir=legacy_src_dir, audit_dir=audit_dir)
         self.staging_agent = StagingAgent()
         self.test_writer = TestWriter()
         self.test_writer_stage = TestWriterStage(config=self.config.get("test_writer"))
         self.test_orchestrator = TestOrchestrator(config=self.config.get("test_orchestrator"))
-        self.audit_dir = self.config.get("global", {}).get("audit_dir", "migration-poc/audit")
+        self.audit_dir = audit_dir
         Path(self.audit_dir).mkdir(parents=True, exist_ok=True)
 
         self.tracer = tracer or self._setup_otel_tracer()
