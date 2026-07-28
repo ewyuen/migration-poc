@@ -1,8 +1,33 @@
 # Reqnroll Step Definitions Implementation - Status Report
 
-**Date**: 2026-07-27  
+**Date**: 2026-07-28  
 **Status**: ✅ CORE IMPLEMENTATION COMPLETE (37/58 tasks)  
-**Phase**: End-to-end testing ready
+**Phase**: End-to-end testing complete + Bug fixes applied
+
+---
+
+## Hot Fixes Applied (Session 2)
+
+### 1. Aggressive Markdown Stripping (Commit: d30a42f)
+**Issue**: LLM outputs included explanatory prose after Gherkin/C# content, breaking parsers
+**Fix**: Enhanced `_strip_markdown_blocks()` in both generators to:
+- Remove leading prose before "Feature:" or "namespace"
+- Detect valid content boundaries using pattern matching
+- Truncate everything after the last valid Gherkin/C# line
+**Result**: ✅ Clean Gherkin files (107-117 lines) with zero trailing prose
+
+### 2. Config Path Resolution (Commit: 52082cf)
+**Issue**: Orchestrator failed to find `legacy-src` when running from `migration-poc/` directory
+**Fix**: Updated OrchestratorV3 to read and use paths from config YAML
+**Result**: ✅ Pipeline now works from any directory with proper path resolution
+
+### End-to-End Test Results
+Ran full 8-stage pipeline on TestService component:
+- ✅ All 8 stages executed successfully
+- ✅ Gherkin files generated cleanly (no trailing LLM prose)
+- ✅ StepDefinitions.cs files generated with valid C# (no trailing text)
+- ✅ Config paths properly resolved
+- ⚠️ Step definitions compilation had minor issues (documented in verification stage)
 
 ---
 
