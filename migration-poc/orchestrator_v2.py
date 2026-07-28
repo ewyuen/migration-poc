@@ -4,7 +4,6 @@ import json
 import yaml
 import sys
 import re
-import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional, Tuple
@@ -83,20 +82,6 @@ class OrchestratorV2:
         self.test_orchestrator = TestOrchestrator(config=self.config.get("test_orchestrator"))
         self.audit_dir = self.config.get("global", {}).get("audit_dir", "migration-poc/audit")
         Path(self.audit_dir).mkdir(parents=True, exist_ok=True)
-
-    def _cleanup_component_dirs(self, component_name: str) -> None:
-        """Clean up legacy-code and migrated-output for component"""
-        legacy_code_path = os.path.join("legacy-code", component_name)
-        migrated_output_path = os.path.join("migrated-output", component_name)
-        result_log_path = os.path.join("migrated-output", "result-log")
-
-        for path in [legacy_code_path, migrated_output_path, result_log_path]:
-            if os.path.exists(path):
-                try:
-                    shutil.rmtree(path)
-                    print(f"🧹 Cleaned up: {path}")
-                except Exception as e:
-                    print(f"⚠️  Failed to clean up {path}: {e}")
 
     def _load_config(self) -> Dict:
         """Load configuration from YAML file"""
@@ -237,7 +222,7 @@ class OrchestratorV2:
             lines = lines[:-1]
         return '\n'.join(lines)
 
-    def _save_output(self, component_name: str, filename: str, content: str) -> str:
+    def _save_output(self, run_id: str, filename: str, content: str) -> str:
         """Save output to migrated-output directory"""
         # Determine if this is a source file, test file, or log/report
         is_source_file = filename.endswith(('.cs', '.csproj'))
@@ -248,9 +233,9 @@ class OrchestratorV2:
         if is_log_file:
             output_dir = os.path.join("migrated-output", "result-log")
         elif is_test_file or is_feature_file:
-            output_dir = os.path.join("migrated-output", component_name, "tests")
+            output_dir = os.path.join("migrated-output", run_id, "tests")
         else:
-            output_dir = os.path.join("migrated-output", component_name, "src")
+            output_dir = os.path.join("migrated-output", run_id, "src")
 
         Path(output_dir).mkdir(parents=True, exist_ok=True)
 
@@ -284,10 +269,6 @@ class OrchestratorV2:
         print(f"Target Framework: {self.config['global']['target_framework']}")
         print("="*70)
 
-        # Clean up previous runs
-        print("\n🧹 Cleaning up previous output directories...")
-        self._cleanup_component_dirs(request.component_name)
-
         # STAGE 1: VALIDATION
         state.advance_stage("validation")
         is_valid, error = self._validate_request(request)
@@ -306,11 +287,12 @@ class OrchestratorV2:
             self._log_workflow(state)
             return state.to_dict()
         state.artifacts["staging"] = staging_results
+        run_id = staging_results["run_id"]
         state.mark_stage_complete()
 
         # STAGE 3: EXPLORATION
         state.advance_stage("exploration")
-        success, exploration_results = self._explore_component(request.component_name)
+        success, exploration_results = self._explore_component(request.component_name, run_id)
         if not success:
             state.mark_stage_failed("Exploration failed")
             self._log_workflow(state)
@@ -320,8 +302,8 @@ class OrchestratorV2:
 
         # STAGE 4: MODERNIZATION (with self-healing compilation verification)
         state.advance_stage("modernization")
-        legacy_code_path = os.path.join("legacy-code", request.component_name)
-        output_src_dir = os.path.join("migrated-output", request.component_name, "src")
+        legacy_code_path = os.path.join("legacy-code", run_id)
+        output_src_dir = os.path.join("migrated-output", run_id, "src")
         failure_log_dir = os.path.join("migrated-output", "result-log")
 
         # IMPORTANT: Only process .cs and .csproj files
@@ -407,7 +389,7 @@ class OrchestratorV2:
 
             # Save modernized files with original names
             for filename, content in all_modernized_code.items():
-                self._save_output(request.component_name, filename, content)
+                self._save_output(run_id, filename, content)
 
             state.artifacts["modernization"] = all_modernized_code
             state.mark_stage_complete()
@@ -426,20 +408,20 @@ class OrchestratorV2:
         state.advance_stage("bdd_and_testing")
         modernized_code_str = "\n\n".join(all_modernized_code.values())
         bdd_tests = generate_bdd_tests(modernized_code_str, modernized_code_str, exploration_results)
-        self._save_output(request.component_name, "scenarios.feature", bdd_tests)
+        self._save_output(run_id, "scenarios.feature", bdd_tests)
 
         # Generate executable tests from Gherkin (NEW)
         success, error, test_code = self.test_writer.write_tests_from_gherkin(
             bdd_tests,
             request.component_name,
-            self._save_output(request.component_name, f"{request.component_name}.Tests.cs", "")
+            self._save_output(run_id, f"{request.component_name}.Tests.cs", "")
         )
 
         if success:
-            self._save_output(request.component_name, f"{request.component_name}.Tests.cs", test_code)
+            self._save_output(run_id, f"{request.component_name}.Tests.cs", test_code)
             # Run TestOrchestrator for self-healing test generation and compilation
             print("🔄 Running TestOrchestrator for self-healing test generation...")
-            orchestrator_result = self.test_orchestrator.execute(request.component_name)
+            orchestrator_result = self.test_orchestrator.execute(request.component_name, run_id)
 
             # Check orchestration compilation result
             if orchestrator_result.get("compiled"):
@@ -448,7 +430,7 @@ class OrchestratorV2:
                 print(f"❌ TestOrchestrator failed to compile tests after {orchestrator_result.get('attempts', 'unknown')} attempts")
 
             # Read the updated test code from disk after orchestration completes
-            test_file_path = os.path.join("migrated-output", request.component_name, "tests", f"{request.component_name}.Tests.cs")
+            test_file_path = os.path.join("migrated-output", run_id, "tests", f"{request.component_name}.Tests.cs")
             if os.path.exists(test_file_path):
                 with open(test_file_path, "r", encoding="utf-8") as f:
                     test_code = f.read()
@@ -489,6 +471,7 @@ class OrchestratorV2:
             test_orchestration = state.artifacts.get("test_orchestration", {})
             verification_results = run_tests_and_collect_coverage(
                 request.component_name,
+                run_id,
                 commented_tests=test_orchestration.get("commented_tests", []),
                 commented_classes=test_orchestration.get("commented_classes", []),
             )
@@ -533,14 +516,18 @@ class OrchestratorV2:
             print(f"✅ Staging complete")
             return True, results
         else:
-            error = results.get("steps", {}).get("create_branch", {}).get("error", "Unknown error")
+            error = "Unknown error"
+            for step_result in results.get("steps", {}).values():
+                if not step_result.get("success"):
+                    error = step_result.get("error", "Unknown error")
+                    break
             return False, {"error": error}
 
-    def _explore_component(self, component_name: str) -> Tuple[bool, Dict]:
+    def _explore_component(self, component_name: str, run_id: str) -> Tuple[bool, Dict]:
         """Explore component using explorer agent"""
         print(f"Exploring component: {component_name}...")
 
-        component_path = os.path.join("legacy-code", component_name)
+        component_path = os.path.join("legacy-code", run_id)
         if not os.path.exists(component_path):
             return False, {}
 
@@ -587,7 +574,9 @@ class OrchestratorV2:
                 for fail in verification.get("failures", [])[:3]:
                     print(f"    - {fail['test_name']}: {fail['message']}")
 
-        print(f"\n📁 Source files saved to: migrated-output/{state.request.component_name}/src/")
+        run_id = state.artifacts.get("staging", {}).get("run_id")
+        if run_id:
+            print(f"\n📁 Source files saved to: migrated-output/{run_id}/src/")
         print(f"📁 Logs and reports saved to: migrated-output/result-log/")
         print("="*70 + "\n")
 

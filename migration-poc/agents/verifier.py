@@ -126,6 +126,7 @@ def _parse_coverage_results(tests_dir: str) -> tuple:
 
 def run_tests_and_collect_coverage(
     component_name: str,
+    run_id: str,
     base_output_dir: str = "migrated-output",
     commented_tests: list = None,
     commented_classes: list = None,
@@ -135,6 +136,7 @@ def run_tests_and_collect_coverage(
 
     Args:
         component_name: Name of the migrated service
+        run_id: Per-run identifier used to locate this run's output directory
         base_output_dir: Base output directory
         commented_tests: Test methods Stage 5 commented out after exhausting its self-healing
             retries (surfaced here so the final report shows what couldn't be made to compile)
@@ -144,7 +146,7 @@ def run_tests_and_collect_coverage(
         Dictionary verification report
     """
     print(f"🧪 Starting test runner agent for component: {component_name}...")
-    component_dir = os.path.join(base_output_dir, component_name)
+    component_dir = os.path.join(base_output_dir, run_id)
     tests_dir = os.path.join(component_dir, "tests")
 
     report = {
@@ -228,12 +230,12 @@ def run_tests_and_collect_coverage(
         print(f"❌ Unexpected error: {e}")
 
     # 3. Generate Reports
-    _write_reports(component_name, report)
-    
+    _write_reports(component_name, run_id, report)
+
     return report
 
 
-def _write_reports(component_name: str, report: dict) -> None:
+def _write_reports(component_name: str, run_id: str, report: dict) -> None:
     """Save markdown and JSON reports under result-log and tests directories"""
     # Create output folders
     log_dir = os.path.join("migrated-output", "result-log")
@@ -287,7 +289,7 @@ def _write_reports(component_name: str, report: dict) -> None:
         md_content += "🎉 All tests passed successfully with zero failures!\n"
 
     # Write Markdown to tests folder
-    tests_md_path = os.path.join("migrated-output", component_name, "tests", "verification_report.md")
+    tests_md_path = os.path.join("migrated-output", run_id, "tests", "verification_report.md")
     try:
         with open(tests_md_path, "w", encoding="utf-8") as f:
             f.write(md_content)

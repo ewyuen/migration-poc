@@ -32,6 +32,7 @@ class TestWriterStage:
     def execute(
         self,
         component_name: str,
+        run_id: str,
         skeleton_content: Optional[str] = None,
         feedback_errors: Optional[Dict[str, List[str]]] = None,
     ) -> Dict:
@@ -40,6 +41,7 @@ class TestWriterStage:
 
         Args:
             component_name: Name of the migrated service
+            run_id: Per-run identifier used to locate this run's output directory
             skeleton_content: Pristine skeleton content to fill from (always used over re-reading
                 disk when provided, so retries never compound on a previous attempt's output)
             feedback_errors: Optional mapping of method_name -> compiler errors from the previous
@@ -72,7 +74,7 @@ class TestWriterStage:
             # older pipeline runs can leave stale generated files (e.g. Models.cs) sitting at
             # the component root, and introspecting those would ground the LLM in interfaces
             # that were never really part of Stage 4's current output.
-            component_dir = os.path.join(self.base_output_dir, component_name)
+            component_dir = os.path.join(self.base_output_dir, run_id)
             service_dir = os.path.join(component_dir, "src")
             if not os.path.exists(service_dir):
                 self.logger.warning(f"Service source directory not found: {service_dir}")

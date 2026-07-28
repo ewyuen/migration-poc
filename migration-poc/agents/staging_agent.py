@@ -1,16 +1,15 @@
-"""Staging Agent: Copy components to legacy-code and create feature branches"""
+"""Staging Agent: Copy components to legacy-code, scoped per migration run"""
 import os
 import shutil
 import json
 import hashlib
-import subprocess
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 
 
 class StagingAgent:
-    """Handles component copying and branch creation"""
+    """Handles component copying, scoped by a per-run run_id"""
 
     def __init__(self, legacy_src_dir: str = "legacy-src", legacy_code_dir: str = "legacy-code"):
         self.legacy_src_dir = legacy_src_dir
@@ -21,59 +20,15 @@ class StagingAgent:
         """Ensure required directories exist"""
         Path(self.legacy_code_dir).mkdir(parents=True, exist_ok=True)
 
-    def create_feature_branch(self, component_name: str) -> Tuple[bool, str, str]:
+    def copy_component(self, component_name: str, run_id: str) -> Tuple[bool, str, Dict]:
         """
-        Create feature branch for migration
-
-        Returns:
-            Tuple of (success, branch_name, error_message)
-        """
-        branch_name = self._generate_branch_name(component_name)
-
-        try:
-            # Check if branch already exists and append time if it does
-            branch_check = subprocess.run(
-                ["git", "rev-parse", "--verify", branch_name],
-                cwd=os.getcwd(),
-                capture_output=True,
-                check=False,
-                timeout=10
-            )
-
-            if branch_check.returncode == 0:
-                # Branch exists, append current time to make it unique
-                time_suffix = datetime.now().strftime("%H%M%S")
-                branch_name = f"{branch_name}-{time_suffix}"
-
-            # Create new branch from main
-            result = subprocess.run(
-                ["git", "checkout", "-b", branch_name],
-                cwd=os.getcwd(),
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
-
-            if result.returncode == 0:
-                print(f"✅ Branch created: {branch_name}")
-                return True, branch_name, ""
-            else:
-                return False, "", f"Failed to create branch: {result.stderr}"
-
-        except subprocess.TimeoutExpired:
-            return False, "", "Git operation timed out"
-        except Exception as e:
-            return False, "", f"Error creating branch: {str(e)}"
-
-    def copy_component(self, component_name: str) -> Tuple[bool, str, Dict]:
-        """
-        Copy component from legacy-src to legacy-code
+        Copy component from legacy-src to a run_id-scoped subdirectory of legacy-code
 
         Returns:
             Tuple of (success, error_message, file_manifest)
         """
         src_path = os.path.join(self.legacy_src_dir, component_name)
-        dst_path = os.path.join(self.legacy_code_dir, component_name)
+        dst_path = os.path.join(self.legacy_code_dir, run_id)
 
         # Validate source exists
         if not os.path.exists(src_path):
@@ -102,12 +57,19 @@ class StagingAgent:
         except Exception as e:
             return False, f"Failed to copy component: {str(e)}", {}
 
-    def _generate_branch_name(self, component_name: str) -> str:
-        """Generate branch name with timestamp"""
-        timestamp = datetime.now().strftime("%Y%m%d")
+    def _generate_run_id(self, component_name: str) -> str:
+        """Generate a unique, always-timestamped run_id for this migration run.
+
+        Millisecond precision (not just HH:MM:SS) is needed so two runs
+        started in quick succession never collide -- copy_component() removes
+        any pre-existing directory at the destination before copying, so a
+        collision here would silently overwrite an in-progress run.
+        """
+        now = datetime.now()
+        timestamp = now.strftime("%m%d%y-%H%M%S") + f"-{now.microsecond // 1000:03d}"
         # Convert to lowercase and replace spaces with hyphens
         sanitized_name = component_name.lower().replace(" ", "-")
-        return f"{sanitized_name}-migration-{timestamp}"
+        return f"{sanitized_name}-{timestamp}"
 
     def _generate_manifest(self, directory: str) -> Dict:
         """Generate file manifest with paths and checksums"""
@@ -152,7 +114,7 @@ class StagingAgent:
         except Exception:
             return ""
 
-    def validate_copy_completeness(self, component_name: str, manifest: Dict) -> Tuple[bool, str]:
+    def validate_copy_completeness(self, component_name: str, run_id: str, manifest: Dict) -> Tuple[bool, str]:
         """
         Verify that copy was successful
 
@@ -160,7 +122,7 @@ class StagingAgent:
             Tuple of (is_complete, error_message)
         """
         src_path = os.path.join(self.legacy_src_dir, component_name)
-        dst_path = os.path.join(self.legacy_code_dir, component_name)
+        dst_path = os.path.join(self.legacy_code_dir, run_id)
 
         try:
             # Count files in source and destination
@@ -185,52 +147,7 @@ class StagingAgent:
         except Exception as e:
             return False, f"Validation failed: {str(e)}"
 
-    def create_initial_commit(self, component_name: str) -> Tuple[bool, str]:
-        """
-        Create initial commit with component copy
-
-        Returns:
-            Tuple of (success, error_message)
-        """
-        try:
-            component_path = os.path.join(self.legacy_code_dir, component_name)
-
-            # Stage all files
-            result = subprocess.run(
-                ["git", "add", component_path],
-                cwd=os.getcwd(),
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
-
-            if result.returncode != 0:
-                return False, f"Failed to stage files: {result.stderr}"
-
-            # Create commit
-            commit_message = f"Initial copy: {component_name} from legacy-src for migration"
-            file_count = sum(1 for root, dirs, files in os.walk(component_path) for f in files)
-
-            result = subprocess.run(
-                ["git", "commit", "-m", f"{commit_message}\n\nFiles: {file_count}"],
-                cwd=os.getcwd(),
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
-
-            if result.returncode == 0:
-                print(f"✅ Initial commit created for {component_name}")
-                return True, ""
-            else:
-                return False, f"Commit failed: {result.stderr}"
-
-        except subprocess.TimeoutExpired:
-            return False, "Git operation timed out"
-        except Exception as e:
-            return False, f"Error creating commit: {str(e)}"
-
-    def create_metadata_file(self, component_name: str, manifest: Dict, branch_name: str) -> Tuple[bool, str]:
+    def create_metadata_file(self, component_name: str, run_id: str, manifest: Dict) -> Tuple[bool, str]:
         """
         Create metadata file documenting the staging operation
 
@@ -242,13 +159,13 @@ class StagingAgent:
                 "component_name": component_name,
                 "timestamp": datetime.now().isoformat(),
                 "source_path": os.path.join(self.legacy_src_dir, component_name),
-                "destination_path": os.path.join(self.legacy_code_dir, component_name),
-                "branch_name": branch_name,
+                "destination_path": os.path.join(self.legacy_code_dir, run_id),
+                "run_id": run_id,
                 "status": "ready_for_modernization",
                 "manifest": manifest
             }
 
-            metadata_path = os.path.join(self.legacy_code_dir, component_name, ".staging_metadata.json")
+            metadata_path = os.path.join(self.legacy_code_dir, run_id, ".staging_metadata.json")
 
             with open(metadata_path, "w", encoding="utf-8") as f:
                 json.dump(metadata, f, indent=2)
@@ -261,56 +178,46 @@ class StagingAgent:
 
     def stage_component(self, component_name: str) -> Dict:
         """
-        Main staging workflow: branch, copy, validate, commit, metadata
+        Main staging workflow: generate run_id, copy, validate, metadata
 
         Returns:
             Dictionary with staging results
         """
+        run_id = self._generate_run_id(component_name)
+
         results = {
             "component_name": component_name,
+            "run_id": run_id,
             "timestamp": datetime.now().isoformat(),
             "steps": {}
         }
 
-        print(f"\n[STAGING] Starting staging for {component_name}")
+        print(f"\n[STAGING] Starting staging for {component_name} (run_id: {run_id})")
         print("-" * 70)
 
-        # Step 1: Create branch
-        success, branch_name, error = self.create_feature_branch(component_name)
-        results["steps"]["create_branch"] = {"success": success, "error": error, "branch_name": branch_name}
-        if not success:
-            print(f"❌ Branch creation failed: {error}")
-            return results
-
-        # Step 2: Copy component
-        success, error, manifest = self.copy_component(component_name)
+        # Step 1: Copy component
+        success, error, manifest = self.copy_component(component_name, run_id)
         results["steps"]["copy_component"] = {"success": success, "error": error, "file_count": manifest.get("total_files", 0)}
         if not success:
             print(f"❌ Component copy failed: {error}")
             return results
 
-        # Step 3: Validate copy
-        success, error = self.validate_copy_completeness(component_name, manifest)
+        # Step 2: Validate copy
+        success, error = self.validate_copy_completeness(component_name, run_id, manifest)
         results["steps"]["validate_copy"] = {"success": success, "error": error}
         if not success:
             print(f"❌ Copy validation failed: {error}")
             return results
 
-        # Step 4: Create initial commit
-        success, error = self.create_initial_commit(component_name)
-        results["steps"]["create_commit"] = {"success": success, "error": error}
-        if not success:
-            print(f"⚠️  Commit creation failed (non-fatal): {error}")
-
-        # Step 5: Create metadata
-        success, error = self.create_metadata_file(component_name, manifest, branch_name)
+        # Step 3: Create metadata
+        success, error = self.create_metadata_file(component_name, run_id, manifest)
         results["steps"]["create_metadata"] = {"success": success, "error": error}
         if not success:
             print(f"⚠️  Metadata creation failed (non-fatal): {error}")
 
-        print("\n✅ Staging complete for {component_name}")
+        print(f"\n✅ Staging complete for {component_name}")
         results["status"] = "success"
-        results["branch_name"] = branch_name
+        results["run_id"] = run_id
 
         return results
 
