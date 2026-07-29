@@ -1,0 +1,11 @@
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
+    environment:
+      LANGFUSE_AUTH_STRING: ${LANGFUSE_AUTH_STRING}
+    ports:
+      - "4317:4317"
+      - "4318:4318"
